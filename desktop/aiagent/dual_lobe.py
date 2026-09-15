@@ -352,7 +352,7 @@ class DualLobeCoordinator:
                 )
 
                 future: Optional[Future] = None
-                if self.profile != PROFILE_OFF:
+                if self.profile != PROFILE_OFF and not _has_terminal_action(current.response):
                     future = self.executor.submit(
                         self.preview_fn,
                         current,
