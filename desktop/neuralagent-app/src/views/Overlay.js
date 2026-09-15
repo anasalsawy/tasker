@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
-import neuralagent_logo_ic_only_white from '../assets/neuralagent_logo_ic_only_white.png'
 import { AvatarButton, IconButton } from '../components/Elements/Button';
 import { useSelector } from 'react-redux';
 import axios from '../utils/axios';
@@ -285,12 +284,7 @@ export default function Overlay() {
     <Container>
       <div style={{display: 'flex', alignItems: 'center', width: '100%', height: '60px'}}>
         <AvatarButton onClick={() => toggleOverlay()}>
-          <img
-            src={neuralagent_logo_ic_only_white}
-            alt='NeuralAgent'
-            height={30}
-            style={{userSelect: 'none', pointerEvents: 'none'}}
-          />
+          <span className="tasker-overlay-mark" aria-label="Tasker">T</span>
         </AvatarButton>
         {expanded && (
           <>
