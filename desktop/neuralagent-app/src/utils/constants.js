@@ -5,8 +5,8 @@ const constants = {
   BASE_URL: SERVER_DNS + '/apps',
   WEBSOCKET_URL: WEBSOCKET_DNS + '/apps',
   API_KEY: process.env.REACT_APP_API_KEY,
-  APP_NAME: 'NeuralAgent',
-  NEURALAGENT_LINK: 'https://www.getneuralagent.com',
+  APP_NAME: 'Tasker',
+  NEURALAGENT_LINK: 'https://github.com/anasalsawy/tasker',
   GENERAL_ERROR: 'Something wrong happened, please try again.',
   status: {
     INTERNAL_SERVER_ERROR: 500,
