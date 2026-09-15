@@ -14,7 +14,7 @@ import { setAppLoading, setUser, setAccessToken, setLoadingDialog } from './stor
 import RedirectTo from './components/RedirectTo';
 import axios from './utils/axios';
 import { logoutUser, refreshToken } from './utils/helpers';
-import { AppMainContainer, OverlayContainer } from './layouts/Containers';
+import { OverlayContainer } from './layouts/Containers';
 import TaskerSidebar from './layouts/TaskerSidebar';
 import { useLocation } from 'react-router-dom';
 
