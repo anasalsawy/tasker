@@ -15,7 +15,7 @@ import RedirectTo from './components/RedirectTo';
 import axios from './utils/axios';
 import { logoutUser, refreshToken } from './utils/helpers';
 import { AppMainContainer, OverlayContainer } from './layouts/Containers';
-import Sidebar from './layouts/Sidebar';
+import TaskerSidebar from './layouts/TaskerSidebar';
 import { useLocation } from 'react-router-dom';
 
 import Login from './views/Login';
@@ -59,14 +59,14 @@ function AppRoutes() {
             </Routes>
           )
         ) : (
-          <AppMainContainer>
-            <Sidebar />
+          <div className="tasker-app">
+            <TaskerSidebar />
             <Routes>
               <Route path='/' element={<Home />} />
               <Route path='/threads/:tid' element={<Thread />} />
               <Route path="*" element={<RedirectTo linkType="router" to="/" redirectType="replace" />} />
             </Routes>
-          </AppMainContainer>
+          </div>
         )
       ) : (
         <Routes>
