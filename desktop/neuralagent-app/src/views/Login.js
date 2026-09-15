@@ -10,7 +10,7 @@ import {
   OrDiv
 } from '../components/OuterElements';
 
-import { Button, AvatarButton, AvatarBtnIcon, BtnIcon } from '../components/Elements/Button';
+import { Button, BtnIcon } from '../components/Elements/Button';
 import { EMAIL_REGEX } from '../utils/regex';
 import { useDispatch } from 'react-redux';
 import { setLoadingDialog, setError } from '../store';
@@ -18,7 +18,6 @@ import constants from '../utils/constants';
 import { useNavigate, Link } from 'react-router-dom';
 import axios, { API_KEY_HEADER } from '../utils/axios';
 import { Text } from '../components/Elements/Typography';
-import { FaFacebookF } from "react-icons/fa";
 import { FcGoogle } from "react-icons/fc";
 import { FlexSpacer } from '../components/Elements/SmallElements';
 
