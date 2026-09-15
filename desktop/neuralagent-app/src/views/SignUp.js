@@ -9,7 +9,7 @@ import {
   AccountTextField,
   OrDiv
 } from '../components/OuterElements';
-import neuralagent_logo_white from '../assets/neuralagent_logo_white.png';
+
 import { Button, BtnIcon } from '../components/Elements/Button';
 import { EMAIL_REGEX } from '../utils/regex';
 import { useDispatch } from 'react-redux';
@@ -98,12 +98,7 @@ function SignUp() {
         <AccountContainer>
           <AccountHeader>
             <a href={constants.NEURALAGENT_LINK} target="_blank" rel="noreferrer" style={{textDecoration: 'none'}}>
-              <img
-                src={neuralagent_logo_white}
-                height={45}
-                alt="NeuralAgent"
-                style={{userSelect: 'none', pointerEvents: 'none'}}
-              />
+              <div className="tasker-auth-wordmark" aria-label="Tasker">TASKER</div>
             </a>
             <FlexSpacer isRTL={false} />
             <Button color="#fff"
