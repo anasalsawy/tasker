@@ -1,121 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import styled, { keyframes } from 'styled-components';
-import { AvatarButton, IconButton } from '../components/Elements/Button';
+import React, { useEffect, useState } from 'react';
+import { FiActivity, FiMoon, FiSend, FiSquare, FiZap } from 'react-icons/fi';
 import { useSelector } from 'react-redux';
 import axios from '../utils/axios';
-import { FaStopCircle } from 'react-icons/fa';
 import constants from '../utils/constants';
-import { MdOutlineSchedule } from 'react-icons/md';
-import { GiBrain } from 'react-icons/gi';
-
-const Container = styled.div`
-  background: transparent;
-  padding: 0px 8px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  height: 100vh;
-  width: 100%;
-  transition: height 0.3s ease;
-`;
-
-const Input = styled.input`
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: white;
-  font-size: 14px;
-  outline: none;
-`;
-
-const spin = keyframes`
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-`;
-
-const Spinner = styled.div`
-  margin-left: 8px;
-  width: 21px;
-  height: 21px;
-  border: 2px solid white;
-  border-top: 2px solid transparent;
-  border-radius: 50%;
-  animation: ${spin} 1s linear infinite;
-`;
-
-const SuggestionsPanel = styled.div`
-  margin-top: 5px;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 10px;
-  flex: 1;
-  overflow-y: auto;
-`;
-
-const SuggestionItem = styled.div`
-  padding: 8px;
-  margin-bottom: 6px;
-  background: rgba(255,255,255,0.07);
-  border-radius: 6px;
-  color: white;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s;
-
-  &:hover {
-    background: rgba(255,255,255,0.15);
-  }
-`;
-
-const shimmer = keyframes`
-  0% {
-    background-position: -200px 0;
-  }
-  100% {
-    background-position: calc(200px + 100%) 0;
-  }
-`;
-
-const SkeletonItem = styled.div`
-  height: 36px;
-  margin-bottom: 6px;
-  border-radius: 6px;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.07) 25%,
-    rgba(255, 255, 255, 0.15) 50%,
-    rgba(255, 255, 255, 0.07) 75%
-  );
-  background-size: 200px 100%;
-  animation: ${shimmer} 1.2s infinite;
-`;
-
-const ToggleContainer = styled.div`
-  display: flex;
-  align-items: center;
-`;
-
-const ModeToggle = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background-color: ${({ active }) => (active ? 'rgba(255,255,255,0.1)' : 'transparent')};
-  color: #fff;
-  border: thin solid rgba(255,255,255,0.2);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11.5px;
-  transition: background-color 0.2s ease;
-  cursor: pointer;
-
-  &:hover {
-    background-color: rgba(255,255,255,0.1);
-  }
-
-  svg {
-    font-size: 15px;
-  }
-`;
 
 export default function Overlay() {
   const [expanded, setExpanded] = useState(false);
@@ -126,108 +13,80 @@ export default function Overlay() {
   const [suggestions, setSuggestions] = useState([]);
   const [backgroundMode, setBackgroundMode] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
+  const accessToken = useSelector((state) => state.accessToken);
 
-  const accessToken = useSelector(state => state.accessToken);
-
-  const executeTask = () => {
-    if (loading) {
-      return;
+  const getSuggestions = async () => {
+    try {
+      const result = await window.electronAPI.getSuggestions(
+        process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS
+      );
+      setSuggestions(result.suggestions || []);
+    } catch {
+      setSuggestions([]);
     }
-    createThread();
   };
 
-  const executeSuggestion = (prompt) => {
-    if (loading) return;
+  const createThread = async (prompt = null) => {
+    const task = (prompt || messageText).trim();
+    if (!task || loading) return;
 
-    window.electronAPI.expandOverlay(false);
-    setShowSuggestions(false);
-    createThread(prompt);
-  };
-
-  const toggleOverlay = async () => {
-    if (!expanded) {
-      if (runningThreadId === null) {
-        window.electronAPI.expandOverlay(true);
-        setExpanded(true);
-        setShowSuggestions(true);
-        if (suggestions.length === 0) {
-          getSuggestions();
-        }
-      } else {
-        window.electronAPI.expandOverlay(false);
-        setExpanded(true);
+    setMessageText('');
+    setLoading(true);
+    try {
+      const response = await axios.post('/threads', {
+        task,
+        background_mode: backgroundMode,
+        extended_thinking_mode: thinkingMode,
+      }, {
+        headers: { Authorization: 'Bearer ' + accessToken },
+      });
+      const data = response.data;
+      if (data.type === 'desktop_task') {
+        const wantsBackground = backgroundMode || data.is_background_mode_requested;
+        const wantsThinking = thinkingMode || data.is_extended_thinking_mode_requested;
+        setBackgroundMode(Boolean(wantsBackground));
+        setThinkingMode(Boolean(wantsThinking));
+        window.electronAPI.setLastThinkingModeValue(String(Boolean(wantsThinking)));
+        window.electronAPI.launchAIAgent(
+          process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS,
+          data.thread_id,
+          wantsBackground
+        );
+        setRunningThreadId(data.thread_id);
       }
+    } catch (error) {
+      if (error.response?.status === constants.status.UNAUTHORIZED) window.location.reload();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelRunningTask = async () => {
+    if (!runningThreadId) return;
+    setLoading(true);
+    try {
+      await axios.post('/threads/' + runningThreadId + '/cancel_task', {}, {
+        headers: { Authorization: 'Bearer ' + accessToken },
+      });
+      window.electronAPI.stopAIAgent();
+      setRunningThreadId(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleOverlay = () => {
+    if (!expanded) {
+      window.electronAPI.expandOverlay(true);
+      setExpanded(true);
+      setShowSuggestions(runningThreadId === null);
+      if (runningThreadId === null && suggestions.length === 0) getSuggestions();
     } else {
       window.electronAPI.minimizeOverlay();
       setExpanded(false);
       setSuggestions([]);
       setShowSuggestions(false);
     }
-  };
-
-  const getSuggestions = async () => {
-    const suggestedTasks = await window.electronAPI.getSuggestions(
-      process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS,
-    );
-    setSuggestions(suggestedTasks.suggestions);
-  };
-
-  const cancelRunningTask = (tid) => {
-    setLoading(true);
-    axios.post(`/threads/${tid}/cancel_task`, {}, {
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-      }
-    }).then((response) => {
-      setLoading(false);
-      window.electronAPI.stopAIAgent();
-      setRunningThreadId(null);
-    }).catch((error) => {
-      setLoading(false);
-      if (error.response?.status === constants.status.UNAUTHORIZED) {
-        window.location.reload();
-      }
-    });
-  };
-
-  const createThread = async (prompt = null) => {
-    if (messageText.length === 0 && prompt === null) {
-      return;
-    }
-
-    const data = {task: prompt !== null ? prompt : messageText, background_mode: backgroundMode, extended_thinking_mode: thinkingMode};
-    setMessageText('');
-    setLoading(true);
-    axios.post('/threads', data, {
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-      }
-    }).then(async (response) => {
-      setLoading(false);
-      if (response.data.type === 'desktop_task') {
-        if (!backgroundMode && response.data.is_background_mode_requested) {
-          const ready = await window.electronAPI.isBackgroundModeReady();
-          if (!ready) {
-            cancelRunningTask();
-            return;
-          }
-        }
-        setBackgroundMode(backgroundMode || response.data.is_background_mode_requested);
-        setThinkingMode(thinkingMode || response.data.is_extended_thinking_mode_requested);
-        window.electronAPI.setLastThinkingModeValue((thinkingMode || response.data.is_extended_thinking_mode_requested).toString());
-        window.electronAPI.launchAIAgent(
-          process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS,
-          response.data.thread_id,
-          backgroundMode || response.data.is_background_mode_requested
-        );
-        setRunningThreadId(response.data.thread_id);
-      }
-    }).catch((error) => {
-      setLoading(false);
-      if (error.response?.status === constants.status.UNAUTHORIZED) {
-        window.location.reload();
-      }
-    });
   };
 
   const onBGModeToggleChange = async (value) => {
@@ -250,13 +109,11 @@ export default function Overlay() {
         setShowSuggestions(false);
       });
     }
-  }, []);
-
-  useEffect(() => {
     if (window.electronAPI?.onAIAgentExit) {
       window.electronAPI.onAIAgentExit(() => {
         setRunningThreadId(null);
         window.electronAPI.expandOverlay(true);
+        setExpanded(true);
         setShowSuggestions(true);
         setSuggestions([]);
         getSuggestions();
@@ -265,87 +122,57 @@ export default function Overlay() {
   }, []);
 
   useEffect(() => {
-    const asyncTask = async () => {
-      const lastBackgroundModeValue = await window.electronAPI.getLastBackgroundModeValue();
-      setBackgroundMode(lastBackgroundModeValue === 'true');
+    const loadPreferences = async () => {
+      const background = await window.electronAPI.getLastBackgroundModeValue();
+      const thinking = await window.electronAPI.getLastThinkingModeValue();
+      setBackgroundMode(background === 'true');
+      setThinkingMode(thinking === 'true');
     };
-    asyncTask();
-  }, []);
-
-  useEffect(() => {
-    const asyncTask = async () => {
-      const lastThinkingModeValue = await window.electronAPI.getLastThinkingModeValue();
-      setThinkingMode(lastThinkingModeValue === 'true');
-    };
-    asyncTask();
+    loadPreferences();
   }, []);
 
   return (
-    <Container>
-      <div style={{display: 'flex', alignItems: 'center', width: '100%', height: '60px'}}>
-        <AvatarButton onClick={() => toggleOverlay()}>
-          <span className="tasker-overlay-mark" aria-label="Tasker">T</span>
-        </AvatarButton>
+    <div className={'tasker-overlay ' + (expanded ? 'is-expanded' : 'is-compact')}>
+      <div className="tasker-overlay-bar">
+        <button className="tasker-overlay-brand" onClick={toggleOverlay} aria-label={expanded ? 'Minimize Tasker' : 'Expand Tasker'}>
+          <span className="tasker-overlay-mark">T</span>
+          {expanded && <span>Tasker</span>}
+        </button>
         {expanded && (
           <>
-            <div style={{width: '10px'}} />
-            <Input
+            <input
+              className="tasker-overlay-input"
               value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              placeholder="Ask Tasker..."
-              onKeyDown={(e) => e.key === 'Enter' && executeTask()}
+              onChange={(event) => setMessageText(event.target.value)}
+              placeholder="Describe a task…"
+              onKeyDown={(event) => { if (event.key === 'Enter') createThread(); }}
+              aria-label="Tasker command"
             />
-            {!loading && runningThreadId === null && (
-              <> 
-                <div style={{width: '5px'}} />
-                <ToggleContainer>
-                  <ModeToggle
-                    active={backgroundMode}
-                    onClick={() => onBGModeToggleChange(!backgroundMode)}
-                  >
-                    <MdOutlineSchedule />
-                  </ModeToggle>
-                </ToggleContainer>
-                <div style={{width: '5px'}} />
-                <ToggleContainer>
-                  <ModeToggle
-                    active={thinkingMode}
-                    onClick={() => setThinkingMode(!thinkingMode)}
-                  >
-                    <GiBrain />
-                  </ModeToggle>
-                </ToggleContainer>
-              </>
+            {!loading && !runningThreadId && (
+              <div className="tasker-overlay-options">
+                <button className={'tasker-overlay-option ' + (backgroundMode ? 'is-selected' : '')} onClick={() => onBGModeToggleChange(!backgroundMode)} aria-label="Toggle background mode"><FiMoon /></button>
+                <button className={'tasker-overlay-option ' + (thinkingMode ? 'is-selected' : '')} onClick={() => setThinkingMode(!thinkingMode)} aria-label="Toggle extended reasoning"><FiZap /></button>
+                <button className="tasker-overlay-send" onClick={() => createThread()} aria-label="Run task"><FiSend /></button>
+              </div>
             )}
-            {(loading || runningThreadId !== null) && <Spinner />}
-            <div style={{width: '5px'}} />
-            {
-            runningThreadId !== null && <>
-                <IconButton iconSize='21px' color='white' onClick={() => cancelRunningTask(runningThreadId)}
-                  disabled={loading}>
-                  <FaStopCircle />
-                </IconButton>
-              </>
-            }
+            {loading && <span className="tasker-overlay-loading" aria-label="Tasker is working"><FiActivity /></span>}
+            {runningThreadId && (
+              <button className="tasker-overlay-stop" onClick={cancelRunningTask} disabled={loading} aria-label="Stop task"><FiSquare /></button>
+            )}
           </>
         )}
       </div>
       {expanded && showSuggestions && (
-        <SuggestionsPanel>
-          {suggestions.length === 0
-            ? Array.from({ length: 7 }).map((_, idx) => (
-                <SkeletonItem key={idx} />
-              ))
-            : suggestions.map((s, idx) => (
-                <SuggestionItem
-                  key={idx}
-                  onClick={() => executeSuggestion(s.ai_prompt)}
-                >
-                  {s.title}
-                </SuggestionItem>
-              ))}
-        </SuggestionsPanel>
+        <div className="tasker-overlay-suggestions" aria-label="Suggested tasks">
+          {suggestions.length === 0 ? (
+            <div className="tasker-overlay-empty">Reading the current workspace…</div>
+          ) : suggestions.map((suggestion, index) => (
+            <button key={index} className="tasker-overlay-suggestion" onClick={() => createThread(suggestion.ai_prompt)}>
+              <span>{suggestion.title}</span><FiSend aria-hidden="true" />
+            </button>
+          ))}
+        </div>
       )}
-    </Container>
+    </div>
   );
 }
