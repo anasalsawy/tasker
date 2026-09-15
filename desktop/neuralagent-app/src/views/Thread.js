@@ -64,6 +64,16 @@ export default function Thread() {
       if (data.type === 'desktop_task') {
         const wantsBackground = backgroundMode || data.is_background_mode_requested;
         const wantsThinking = thinkingMode || data.is_extended_thinking_mode_requested;
+        if (wantsBackground && !backgroundMode) {
+          const ready = await window.electronAPI.isBackgroundModeReady();
+          if (!ready) {
+            await axios.post('/threads/' + tid + '/cancel_task', {}, {
+              headers: { Authorization: 'Bearer ' + accessToken },
+            });
+            window.electronAPI.startBackgroundSetup();
+            return;
+          }
+        }
         setBackgroundMode(Boolean(wantsBackground));
         setThinkingMode(Boolean(wantsThinking));
         window.electronAPI.setLastThinkingModeValue(String(Boolean(wantsThinking)));
