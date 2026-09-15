@@ -455,7 +455,7 @@ function launchBackgroundAuthWindow() {
       backgroundAuthWindow = new BrowserWindow({
         width: 1350,
         height: 780,
-        title: 'NeuralAgent Background Auth',
+        title: 'Tasker Background Auth',
         icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
         webPreferences: {
           contextIsolation: true,
@@ -489,7 +489,7 @@ function launchBackgroundAgentWindow() {
       bgAgentWindow = new BrowserWindow({
         width: 1350,
         height: 780,
-        title: 'NeuralAgent Background Task',
+        title: 'Tasker Background Task',
         icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
         webPreferences: {
           contextIsolation: true,
