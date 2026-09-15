@@ -1,0 +1,39 @@
+name: Tasker checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile Tasker Python sources
+        run: python -m compileall -q backend desktop/aiagent
+
+  frontend-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            desktop/package-lock.json
+            desktop/neuralagent-app/package-lock.json
+      - name: Install Electron dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Install React dependencies
+        working-directory: desktop/neuralagent-app
+        run: npm ci
+      - name: Build Tasker frontend
+        working-directory: desktop/neuralagent-app
+        run: npm run build
