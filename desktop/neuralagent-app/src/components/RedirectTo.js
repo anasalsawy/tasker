@@ -19,6 +19,7 @@ function RedirectTo({ linkType, to, redirectType }) {
         window.location.href = to;
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
