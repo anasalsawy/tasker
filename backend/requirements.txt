@@ -4,8 +4,8 @@ python-dotenv
 sqlmodel
 pydantic
 alembic
-sqlalchemy
-psycopg2
+SQLAlchemy==2.0.53
+psycopg2-binary
 passlib
 bcrypt
 pyjwt
