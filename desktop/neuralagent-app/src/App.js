@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import './App.css';
 import {
   HashRouter as Router, // BrowserRouter
@@ -87,25 +87,6 @@ function App() {
   const isLoadingDialog = useSelector(state => state.isLoadingDialog);
 
   const dispatch = useDispatch();
-  const [_windowDims, setWindowDims] = useState();
-
-  const [isMobileBarOpen, setMobileBarOpen] = useState(false);
-
-  const handleResize = () => {
-    setWindowDims({
-      height: window.innerHeight,
-      width: window.innerWidth
-    });
-  }
-
-  useEffect(() => {
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-        window.removeEventListener('resize', handleResize);
-    };
-  }, []);
-
   useEffect(() => {
     const asyncTask = async () => {
       const storedAccessToken = await window.electronAPI.getToken();
@@ -118,6 +99,7 @@ function App() {
       }
     }
     asyncTask();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getUserInfo = (accessToken) => {
@@ -145,6 +127,7 @@ function App() {
         logoutUser(token, dispatch);
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const cancelAllRunningTasks = async () => {
@@ -173,6 +156,7 @@ function App() {
         window.electronAPI.cancelAllTasksDone();
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
