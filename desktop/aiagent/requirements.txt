@@ -1,0 +1,15 @@
+requests
+Pillow
+pyautogui
+mss
+pyinstaller
+nuitka
+pyperclip
+httpx
+websockets
+pywin32
+psutil
+# pywinsandbox
+uiautomation
+# pyobjc
+# pyatspi

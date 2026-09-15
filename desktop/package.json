@@ -1,0 +1,79 @@
+{
+  "name": "neuralagent-desktop",
+  "version": "1.5.2",
+  "description": "NeuralAgent Electron Desktop Application",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "concurrently \"npm run react-start\" \"wait-on http://localhost:6763 && electron .\"",
+    "react-start": "cd neuralagent-app && npm start",
+    "react-build": "cd neuralagent-app && npm run build",
+    "build:agent": "\"aiagent\\venv\\Scripts\\pyinstaller\" --clean --noconfirm --onefile --name agent --distpath agent_build/ aiagent/main.py",
+    "build:suggestor": "\"aiagent\\venv\\Scripts\\pyinstaller\" --clean --noconfirm --onefile --name suggestor --distpath agent_build/ aiagent/suggestor.py",
+    "build:agent:nuitko": "\"aiagent\\venv\\Scripts\\nuitka\" ---standalone --onefile --lto=no --output-dir=agent_build/ --output-filename=agent --assume-yes-for-downloads --include-package=comtypes aigent/main.py",
+    "build:suggestor:nuitko": "\"aiagent\\venv\\Scripts\\nuitka\" ---standalone --onefile --lto=no --output-dir=agent_build/ --output-filename=suggestor --assume-yes-for-downloads --include-package=comtypes aigent/suggestor.py",
+    "build": "npm run react-build && electron-builder",
+    "dev": "electron ."
+  },
+  "build": {
+    "appId": "com.getneuralagent.desktop",
+    "productName": "NeuralAgent",
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "electron/**/*",
+      "neuralagent-app/build/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "agent_build/agent.exe",
+        "to": "agent.exe"
+      },
+      {
+        "from": "agent_build/suggestor.exe",
+        "to": "suggestor.exe"
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "arm64"
+        }
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^35.2.0",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.3"
+  },
+  "dependencies": {
+    "electron-is-dev": "^3.0.1",
+    "electron-store": "^10.0.1",
+    "express": "^5.1.0",
+    "sudo-prompt": "^9.2.1",
+    "tree-kill": "^1.2.2",
+    "uuid": "^11.1.0"
+  }
+}

@@ -1,0 +1,4 @@
+/venv/
+.env.example
+.env
+ai_chat_logs/

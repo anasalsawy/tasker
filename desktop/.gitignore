@@ -1,0 +1,32 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/neuralagent-app/node_modules
+/neuralagent-app/.pnp
+/neuralagent-app.pnp.js
+
+# testing
+/neuralagent-app/coverage
+
+# production
+/neuralagent-app/build
+
+# misc
+/neuralagent-app/.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+.env
+/neuralagent-app/.env
+
+/aiagent/venv/
+/dist
+/build
+/agent_build

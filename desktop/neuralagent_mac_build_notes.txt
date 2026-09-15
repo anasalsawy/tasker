@@ -1,0 +1,8 @@
+Update extraResources in package.json to:
+
+"extraResources": [
+    {
+    "from": "agent_build/mac/agent",
+    "to": "agent"
+    }
+],

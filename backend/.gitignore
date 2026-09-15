@@ -1,0 +1,4 @@
+venv/
+.env
+keys/
+ai_chat_logs/
