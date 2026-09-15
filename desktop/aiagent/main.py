@@ -17,6 +17,7 @@ import json
 import asyncio
 import logging
 import ui_extraction
+from dual_lobe import DualLobeCoordinator
 
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -350,7 +351,144 @@ def get_current_subtask():
         pass
     return None
 
+
+def _capture_screen_observation_payload():
+    """Capture the latest screen facts shared with lobe B."""
+    apps = ui_extraction.get_running_apps() or []
+    foreground_app = None
+    for app in apps:
+        if not isinstance(app, dict):
+            continue
+        if app.get("focused") or app.get("is_focused") or app.get("foreground"):
+            foreground_app = (
+                app.get("name")
+                or app.get("title")
+                or app.get("app_name")
+            )
+            break
+    return {
+        "captured_at": time.time(),
+        "screenshot_b64": take_screenshot_b64(),
+        "foreground_app": foreground_app,
+        "interactive_count": len(ui_extraction.extract_interactive_elements() or []),
+        "running_app_count": len(apps),
+    }
+
+
+def _dual_lobe_preview(current_batch, predicted_boundary, observation):
+    url = (
+        os.getenv("NEURALAGENT_API_URL")
+        + "/aiagent/"
+        + os.getenv("NEURALAGENT_THREAD_ID")
+        + "/dual_lobe/predict"
+    )
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + os.getenv("NEURALAGENT_USER_ACCESS_TOKEN"),
+    }
+    interactive_elements = ui_extraction.extract_interactive_elements() or []
+    running_apps = ui_extraction.get_running_apps() or []
+    payload = {
+        "batch_id": current_batch.batch_id + "-next",
+        "current_os": "MacOS" if platform.system() == "darwin" else platform.system(),
+        "current_interactive_elements": interactive_elements,
+        "current_running_apps": running_apps,
+        "executing_batch": {
+            "batch_id": current_batch.batch_id,
+            "source_lobe": current_batch.source_lobe,
+            "actions": current_batch.actions,
+        },
+        "predicted_end": predicted_boundary.as_dict(),
+    }
+    try:
+        payload["screenshot_b64"] = take_screenshot_b64()
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=float(os.getenv("TASKER_PREVIEW_REQUEST_TIMEOUT", "120")),
+        )
+        if response.status_code in (200, 201, 202):
+            data = response.json()
+            if isinstance(data.get("actions"), list) and data["actions"]:
+                return data
+        print("[Tasker] B look-ahead rejected by backend:", response.status_code)
+    except Exception as exc:
+        print("[Tasker] B look-ahead error:", exc)
+    return None
+
+
+def _dual_lobe_commit(batch, observation):
+    url = (
+        os.getenv("NEURALAGENT_API_URL")
+        + "/aiagent/"
+        + os.getenv("NEURALAGENT_THREAD_ID")
+        + "/dual_lobe/commit"
+    )
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + os.getenv("NEURALAGENT_USER_ACCESS_TOKEN"),
+    }
+    payload = {
+        "batch_id": batch.batch_id,
+        "response": batch.response,
+        "predicted_end": batch.predicted_boundary.as_dict(),
+        "observed_boundary": observation.as_dict(),
+    }
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=float(os.getenv("TASKER_COMMIT_REQUEST_TIMEOUT", "30")),
+        )
+        if response.status_code in (200, 201, 202):
+            return bool(response.json().get("accepted"))
+        print("[Tasker] B commit rejected by backend:", response.status_code, response.text[:500])
+    except Exception as exc:
+        print("[Tasker] B commit error:", exc)
+    return False
+
+
+def _run_dual_lobe(initial_response):
+    profile = os.getenv("TASKER_DUAL_LOBE_PROFILE", "screen-aware").strip().lower()
+    max_batches = int(os.getenv("TASKER_DUAL_LOBE_MAX_BATCHES", "20"))
+    coordinator = DualLobeCoordinator(
+        preview_fn=_dual_lobe_preview,
+        commit_fn=_dual_lobe_commit,
+        execute_fn=perform_action,
+        capture_fn=_capture_screen_observation_payload,
+        fallback_fn=get_next_step,
+        profile=profile,
+        trace_fn=lambda message: print("[Tasker] " + message),
+    )
+    report = coordinator.run(initial_response, max_batches=max_batches)
+    print("Tasker dual-lobe report:", json.dumps(report.as_dict(), ensure_ascii=False))
+    return report
+
+
+async def dual_lobe_main_loop():
+    while True:
+        current_subtask_response = get_current_subtask()
+        if not current_subtask_response:
+            continue
+        if current_subtask_response.get("action") == "task_completed":
+            break
+
+        action_response = get_next_step()
+        if not action_response:
+            continue
+
+        report = _run_dual_lobe(action_response)
+        if report.status == "completed":
+            break
+
 async def main_loop():
+    profile = os.getenv("TASKER_DUAL_LOBE_PROFILE", "screen-aware").strip().lower()
+    if profile != "off":
+        await dual_lobe_main_loop()
+        return
+
     while True:
         current_subtask_response = get_current_subtask()
         if not current_subtask_response:
