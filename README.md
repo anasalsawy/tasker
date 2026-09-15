@@ -50,14 +50,27 @@ Install the Electron and React dependencies:
     npm install
     cd ..\..
 
-Create the backend environment file, then fill in the database and model/provider values:
+Create both environment files. Fill in the backend database and model/provider values; the frontend file points the desktop UI at the local backend:
 
     Copy-Item backend\.env.example backend\.env
+    Copy-Item desktop\neuralagent-app\.env.example desktop\neuralagent-app\.env
     notepad backend\.env
+    notepad desktop\neuralagent-app\.env
+
+The frontend .env should contain:
+
+    REACT_APP_PROTOCOL=http
+    REACT_APP_WEBSOCKET_PROTOCOL=ws
+    REACT_APP_DNS=127.0.0.1:8000
+    REACT_APP_API_KEY=
+
+After the PostgreSQL values are configured in backend\.env, create/update the database schema:
+
+    cd backend
+    py -m alembic upgrade head
 
 Start the backend in this PowerShell window:
 
-    cd backend
     py -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Open a second PowerShell window and start the Tasker desktop app:
