@@ -1,24 +1,81 @@
 # Tasker
 
-Tasker is the Tasker-branded continuation of the NeuralAgent desktop automation codebase.
+Tasker is a Tasker-branded continuation of the public NeuralAgent desktop automation codebase.
 
-The initial implementation preserves NeuralAgent's existing architecture:
+The initial application structure is inherited from https://github.com/skyiron/neuralagentAI:
 
 - FastAPI backend
 - Electron desktop shell
 - React desktop UI
-- Python desktop agent using pyautogui, mss, and UI extraction
+- Python desktop agent using pyautogui, mss, and native UI extraction
 - planner and computer-use model paths
+- foreground and background desktop execution
 
-The next layer adds dual-lobe execution on top of that loop: one lobe plans the next safe action batch while the execution lobe performs the current batch, with explicit state, predicted boundaries, and screen-aware verification.
+Tasker adds an opt-in dual-lobe execution layer on top of that loop:
 
-Upstream base: https://github.com/skyiron/neuralagentAI
+- Lobe A executes the accepted action batch.
+- Lobe B prepares the next batch through a stateless look-ahead request.
+- A continuous screen observer records the transition while A runs.
+- B is handed off only after the observed boundary passes the selected policy.
+- B is committed to task state only after its actions execute.
+- A rejected prediction falls back to the inherited NeuralAgent request path.
 
-This repository uses one branch: `main`.
+See docs/tasker-dual-lobe.md for the protocol, profiles, and control condition.
 
-## Status
+## Repository
 
-The repository is being migrated from the upstream codebase before the dual-lobe layer is added. No deterministic demo is presented as proof of real model-backed execution. Live validation requires a configured provider, credentials, and a desktop session.
+- GitHub: https://github.com/anasalsawy/tasker
+- Branch policy: main only
+- Upstream base: https://github.com/skyiron/neuralagentAI
+
+## Install on Windows without a virtual environment
+
+Tasker uses the normal persistent Python installation.
+
+    git clone https://github.com/anasalsawy/tasker.git
+    cd tasker
+    py -m pip install -r backend\\requirements.txt
+    py -m pip install -r desktop\\aiagent\\requirements.txt
+
+Install the Electron dependencies:
+
+    cd desktop
+    npm install
+    cd neuralagent-app
+    npm install
+
+Configure the backend from backend\\.env.example, then start it from the backend directory:
+
+    cd ..\\backend
+    py -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+In another terminal, start the desktop application:
+
+    cd tasker\\desktop
+    npm start
+
+The Electron development launcher invokes the persistent system Python interpreter. Set TASKER_PYTHON if Windows has more than one Python installation.
+
+## Dual-lobe settings
+
+Screen-aware is the default:
+
+    $env:TASKER_DUAL_LOBE_PROFILE = "screen-aware"
+
+Use the single-loop control condition:
+
+    $env:TASKER_DUAL_LOBE_PROFILE = "off"
+
+Additional settings are documented in docs/tasker-dual-lobe.md.
+
+## Status and validation
+
+The dual-lobe coordinator has unit tests for concurrent look-ahead, post-execution commit ordering, and boundary rejection:
+
+    cd desktop\\aiagent
+    py -m unittest test_dual_lobe.py
+
+Those tests validate the coordinator mechanics only. They are not a provider benchmark and do not claim a real model call. Live validation requires a configured backend provider, credentials, and a desktop session.
 
 ## Safety
 
