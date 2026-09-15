@@ -150,6 +150,7 @@ export default function Thread() {
   useEffect(() => {
     getThread();
     getThreadMessages();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tid]);
 
   useEffect(() => {
@@ -171,6 +172,7 @@ export default function Thread() {
         getThreadMessages();
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tid]);
 
   if (!thread) return <main className="tasker-loading-view">Loading task...</main>;
