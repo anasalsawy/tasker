@@ -292,7 +292,7 @@ export default function Overlay() {
             <Input
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
-              placeholder="Ask NeuralAgent..."
+              placeholder="Ask Tasker..."
               onKeyDown={(e) => e.key === 'Enter' && executeTask()}
             />
             {!loading && runningThreadId === null && (
