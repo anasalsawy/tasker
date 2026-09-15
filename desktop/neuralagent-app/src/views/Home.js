@@ -37,6 +37,9 @@ export default function Home() {
         if (wantsBackground && !backgroundMode) {
           const ready = await window.electronAPI.isBackgroundModeReady();
           if (!ready) {
+            await axios.post('/threads/' + data.thread_id + '/cancel_task', {}, {
+              headers: { Authorization: 'Bearer ' + accessToken },
+            });
             window.electronAPI.startBackgroundSetup();
             return;
           }
