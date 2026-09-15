@@ -111,7 +111,7 @@ function Login() {
           <AccountDiv>
             <InfoContainer>
               <FormTitle style={{textAlign: 'center'}}>
-                Login to NeuralAgent
+                Login to Tasker
               </FormTitle>
               <AccountTextField placeholder={'Email'} style={{marginTop: '30px'}} type="email"
                 value={email}
