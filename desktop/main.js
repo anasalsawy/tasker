@@ -202,8 +202,14 @@ ipcMain.on('launch-ai-agent', async (_, baseURL, threadId, backgroundMode) => {
   store.set(constants.LAST_BACKGROUND_MODE_VALUE, backgroundMode.toString());
 
   if (!backgroundMode) {
-    aiagentProcess = spawn(isWindows ? './aiagent/venv/Scripts/python' : './aiagent/venv/bin/python', ['./aiagent/main.py'], {
+    // Tasker uses the user's persistent Python installation in development.
+    // Set TASKER_PYTHON to an explicit interpreter when several are installed.
+    const pythonCommand = process.env.TASKER_PYTHON || (isWindows ? 'python' : 'python3');
+    const agentScript = path.join(__dirname, 'aiagent', 'main.py');
+    aiagentProcess = spawn(pythonCommand, [agentScript], {
+      cwd: __dirname,
       env: {
+        ...process.env,
         NEURALAGENT_API_URL: baseURL,
         NEURALAGENT_THREAD_ID: threadId,
         NEURALAGENT_USER_ACCESS_TOKEN: store.get(constants.ACCESS_TOKEN_STORE_KEY),
