@@ -30,31 +30,44 @@ See docs/tasker-dual-lobe.md for the protocol, profiles, and control condition.
 
 ## Install on Windows without a virtual environment
 
-Tasker uses the normal persistent Python installation.
+Tasker uses your normal persistent Python installation. Do not create or activate a virtual environment.
 
+Prerequisites: Git, Python 3.11+ with the Windows launcher (py), and Node.js/npm.
+
+Open PowerShell and run:
+
+    cd C:\Projects
     git clone https://github.com/anasalsawy/tasker.git
     cd tasker
-    py -m pip install -r backend\\requirements.txt
-    py -m pip install -r desktop\\aiagent\\requirements.txt
+    py -m pip install -r backend\requirements.txt
+    py -m pip install -r desktop\aiagent\requirements.txt
 
-Install the Electron dependencies:
+Install the Electron and React dependencies:
 
     cd desktop
     npm install
     cd neuralagent-app
     npm install
+    cd ..\..
 
-Configure the backend from backend\\.env.example, then start it from the backend directory:
+Create the backend environment file, then fill in the database and model/provider values:
 
-    cd ..\\backend
+    Copy-Item backend\.env.example backend\.env
+    notepad backend\.env
+
+Start the backend in this PowerShell window:
+
+    cd backend
     py -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-In another terminal, start the desktop application:
+Open a second PowerShell window and start the Tasker desktop app:
 
-    cd tasker\\desktop
+    cd C:\Projects\tasker\desktop
     npm start
 
-The Electron development launcher invokes the persistent system Python interpreter. Set TASKER_PYTHON if Windows has more than one Python installation.
+The Electron development launcher invokes the persistent system Python interpreter. Set TASKER_PYTHON only if Windows has more than one Python installation, for example:
+
+    $env:TASKER_PYTHON = "C:\Path\To\python.exe"
 
 ## Dual-lobe settings
 
