@@ -28,6 +28,11 @@
   --tasker-radius-sm: 9px;
   --tasker-shadow: 0 20px 60px hsl(220 40% 3% / 0.36);
   --tasker-mono: 'DM Mono', Consolas, monospace;
+  /* compatibility aliases for inherited utility components */
+  --primary-color: var(--tasker-accent-strong);
+  --danger-color: var(--tasker-danger);
+  --success-color: var(--tasker-accent);
+  --warning-color: var(--tasker-warning);
 }
 
 html,
