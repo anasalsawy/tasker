@@ -17,7 +17,8 @@ def _request_limits():
 
 
 def _agent_env(agent: str, suffix: str, fallback: str = "") -> str:
-    return os.getenv("{}_AGENT_{}".format(agent.upper(), suffix), fallback)
+    value = os.getenv("{}_AGENT_{}".format(agent.upper(), suffix), "").strip()
+    return value or fallback
 
 
 def get_llm(
