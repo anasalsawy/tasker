@@ -1,149 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import { FlexSpacer } from '../components/Elements/SmallElements';
-import { IconButton } from '../components/Elements/Button';
-import { FaArrowAltCircleUp } from 'react-icons/fa';
+import React, { useEffect, useState } from 'react';
+import { FiActivity, FiArrowUpRight, FiLayers, FiMonitor, FiMoon, FiZap } from 'react-icons/fi';
 import { useDispatch, useSelector } from 'react-redux';
-import axios from '../utils/axios';
-import { setLoadingDialog, setError } from '../store';
-import constants from '../utils/constants';
-import { Text } from '../components/Elements/Typography';
-import NATextArea from '../components/Elements/TextAreas';
 import { useNavigate } from 'react-router-dom';
-import { MdOutlineSchedule } from 'react-icons/md';
-import { GiBrain } from 'react-icons/gi';
-
-import styled from 'styled-components';
-
-const HomeDiv = styled.div`
-  flex: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-`;
-
-const Card = styled.div`
-  border: thin solid rgba(255,255,255,0.3);
-  border-radius: 20px;
-  padding: 15px;
-  width: 100%;
-  max-width: 600px;
-`;
-
-const ToggleContainer = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9rem;
-  color: var(--secondary-color);
-`;
-
-const ModeToggle = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background-color: ${({ active }) => (active ? 'rgba(255,255,255,0.1)' : 'transparent')};
-  color: #fff;
-  border: thin solid rgba(255,255,255,0.3);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 13px;
-  transition: background-color 0.2s ease;
-  cursor: pointer;
-
-  &:hover {
-    background-color: rgba(255,255,255,0.1);
-  }
-`;
-
+import axios from '../utils/axios';
+import constants from '../utils/constants';
+import { setError, setLoadingDialog } from '../store';
 
 export default function Home() {
   const [messageText, setMessageText] = useState('');
   const [backgroundMode, setBackgroundMode] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
-
-  const accessToken = useSelector(state => state.accessToken);
-
+  const accessToken = useSelector((state) => state.accessToken);
   const dispatch = useDispatch();
-
   const navigate = useNavigate();
 
-  const cancelRunningTask = (tid) => {
-    dispatch(setLoadingDialog(true));
-    axios.post(`/threads/${tid}/cancel_task`, {}, {
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-      }
-    }).then((response) => {
-      dispatch(setLoadingDialog(false));
-      window.electronAPI.stopAIAgent();
-    }).catch((error) => {
-      dispatch(setLoadingDialog(false));
-      if (error.response.status === constants.status.BAD_REQUEST) {
-        dispatch(setError(true, constants.GENERAL_ERROR));
-      } else {
-        dispatch(setError(true, constants.GENERAL_ERROR));
-      }
-      setTimeout(() => {
-        dispatch(setError(false, ''));
-      }, 3000);
-    });
-  };
-
   const createThread = async () => {
-    if (messageText.length === 0) {
-      return;
-    }
-    const data = {task: messageText, background_mode: backgroundMode, extended_thinking_mode: thinkingMode};
+    const task = messageText.trim();
+    if (!task) return;
+
     setMessageText('');
     dispatch(setLoadingDialog(true));
-    axios.post('/threads', data, {
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-      }
-    }).then(async (response) => {
-      dispatch(setLoadingDialog(false));
-      if (response.data.type === 'desktop_task') {
-        if (!backgroundMode && response.data.is_background_mode_requested) {
+    try {
+      const response = await axios.post(
+        '/threads',
+        {
+          task,
+          background_mode: backgroundMode,
+          extended_thinking_mode: thinkingMode,
+        },
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      );
+      const data = response.data;
+      if (data.type === 'desktop_task') {
+        const wantsBackground = backgroundMode || data.is_background_mode_requested;
+        const wantsThinking = thinkingMode || data.is_extended_thinking_mode_requested;
+        if (wantsBackground && !backgroundMode) {
           const ready = await window.electronAPI.isBackgroundModeReady();
           if (!ready) {
-            cancelRunningTask();
+            window.electronAPI.startBackgroundSetup();
             return;
           }
         }
-        setBackgroundMode(backgroundMode || response.data.is_background_mode_requested);
-        setThinkingMode(thinkingMode || response.data.is_extended_thinking_mode_requested);
-        window.electronAPI.setLastThinkingModeValue((thinkingMode || response.data.is_extended_thinking_mode_requested).toString());
+        setBackgroundMode(Boolean(wantsBackground));
+        setThinkingMode(Boolean(wantsThinking));
+        window.electronAPI.setLastThinkingModeValue(String(Boolean(wantsThinking)));
         window.electronAPI.launchAIAgent(
           process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS,
-          response.data.thread_id,
-          backgroundMode || response.data.is_background_mode_requested
+          data.thread_id,
+          wantsBackground
         );
       }
-      navigate('/threads/' + response.data.thread_id);
-      window.location.reload();
-    }).catch((error) => {
+      navigate('/threads/' + data.thread_id);
+    } catch (error) {
+      const message = error.response?.data?.message === 'Not_Browser_Task_BG_Mode'
+        ? 'Background mode is limited to browser tasks.'
+        : constants.GENERAL_ERROR;
+      dispatch(setError(true, message));
+      window.setTimeout(() => dispatch(setError(false, '')), 3500);
+    } finally {
       dispatch(setLoadingDialog(false));
-      if (error.response.status === constants.status.BAD_REQUEST) {
-        if (error.response.data?.message === 'Not_Browser_Task_BG_Mode') {
-          dispatch(setError(true, 'Background Mode only supports browser tasks.'));
-        } else {
-          dispatch(setError(true, constants.GENERAL_ERROR));
-        }
-      } else {
-        dispatch(setError(true, constants.GENERAL_ERROR));
-      }
-      setTimeout(() => {
-        dispatch(setError(false, ''));
-      }, 3000);
-    });
-  };
-
-  const handleTextEnterKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      createThread();
     }
   };
 
@@ -158,86 +73,90 @@ export default function Home() {
     setBackgroundMode(value);
   };
 
+  const handleTextEnterKey = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      createThread();
+    }
+  };
+
+  useEffect(() => {
+    const loadPreferences = async () => {
+      const background = await window.electronAPI.getLastBackgroundModeValue();
+      const thinking = await window.electronAPI.getLastThinkingModeValue();
+      setBackgroundMode(background === 'true');
+      setThinkingMode(thinking === 'true');
+    };
+    loadPreferences();
+  }, []);
+
   useEffect(() => {
     if (window.electronAPI?.onAIAgentLaunch) {
-      window.electronAPI.onAIAgentLaunch((threadId) => {
-        navigate('/threads/' + threadId)
-        window.location.reload();
-      });
+      window.electronAPI.onAIAgentLaunch((threadId) => navigate('/threads/' + threadId));
     }
-  }, []);
-
-  useEffect(() => {
-    if (window.electronAPI?.onAIAgentExit) {
-      window.electronAPI.onAIAgentExit(() => {
-        window.location.reload();
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    const asyncTask = async () => {
-      const lastBackgroundModeValue = await window.electronAPI.getLastBackgroundModeValue();
-      setBackgroundMode(lastBackgroundModeValue === 'true');
-    };
-    asyncTask();
-  }, []);
-
-  useEffect(() => {
-    const asyncTask = async () => {
-      const lastThinkingModeValue = await window.electronAPI.getLastThinkingModeValue();
-      setThinkingMode(lastThinkingModeValue === 'true');
-    };
-    asyncTask();
-  }, []);
+  }, [navigate]);
 
   return (
-    <HomeDiv>
-      <Text fontWeight='600' fontSize='23px' color='#fff'>
-        Start a New Task
-      </Text>
-      <Card style={{marginTop: '15px'}}>
-        <NATextArea
-          background='transparent'
-          isDarkMode
-          padding='10px 4px'
-          placeholder="What do you want NeuralAgent to do?"
-          rows='3'
-          value={messageText}
-          onChange={(e) => setMessageText(e.target.value)}
-          onKeyDown={handleTextEnterKey}
-        />
-        <div style={{marginTop: '10px', display: 'flex', alignItems: 'center'}}>
-          <ToggleContainer>
-            <ModeToggle
-              active={backgroundMode}
-              onClick={() => onBGModeToggleChange(!backgroundMode)}
-            >
-              <MdOutlineSchedule style={{fontSize: '19px'}} />
-              Background
-            </ModeToggle>
-          </ToggleContainer>
-          <div style={{width: '10px'}} />
-          <ToggleContainer>
-            <ModeToggle
-              active={thinkingMode}
-              onClick={() => setThinkingMode(!thinkingMode)}
-            >
-              <GiBrain style={{fontSize: '19px'}} />
-              Thinking
-            </ModeToggle>
-          </ToggleContainer>
-          <FlexSpacer isRTL={false} />
-          <IconButton
-            iconSize='35px'
-            color='#fff'
-            disabled={messageText.length === 0}
-            onClick={() => createThread()}
-            onKeyDown={handleTextEnterKey}>
-            <FaArrowAltCircleUp />
-          </IconButton>
+    <main className="tasker-home">
+      <section className="tasker-hero">
+        <div className="tasker-kicker"><FiActivity aria-hidden="true" /> Tasker command center</div>
+        <h1>Put the desktop<br /><span>in motion.</span></h1>
+        <p className="tasker-hero-copy">
+          Describe the outcome. Tasker plans the work, operates the visible desktop,
+          and verifies the handoff as it moves.
+        </p>
+
+        <div className="tasker-system-strip" aria-label="Tasker execution status">
+          <div><span className="tasker-status-dot" aria-hidden="true" /><strong>Ready</strong><small>Desktop connected</small></div>
+          <div><FiLayers aria-hidden="true" /><strong>Dual-lobe</strong><small>A executes · B prepares</small></div>
+          <div><FiMonitor aria-hidden="true" /><strong>Screen-aware</strong><small>Boundary verification on</small></div>
         </div>
-      </Card>
-    </HomeDiv>
+      </section>
+
+      <form className="tasker-compose-card" onSubmit={(event) => { event.preventDefault(); createThread(); }}>
+        <div className="tasker-compose-heading">
+          <div>
+            <label htmlFor="tasker-command">What should happen?</label>
+            <p>Use plain language. You can describe a multi-step outcome.</p>
+          </div>
+          <span className="tasker-command-hint">Enter to run · Shift + Enter for a new line</span>
+        </div>
+        <textarea
+          id="tasker-command"
+          className="tasker-command-input"
+          placeholder="Open Chrome, find the latest project brief, and save a copy on my desktop..."
+          rows={4}
+          value={messageText}
+          onChange={(event) => setMessageText(event.target.value)}
+          onKeyDown={handleTextEnterKey}
+          aria-describedby="tasker-command-help"
+        />
+        <div className="tasker-compose-actions">
+          <div className="tasker-option-group" role="group" aria-label="Execution options">
+            <button type="button" className={'tasker-option' + (backgroundMode ? ' is-selected' : '')} onClick={() => onBGModeToggleChange(!backgroundMode)}>
+              <FiMoon aria-hidden="true" /><span>Background</span>
+            </button>
+            <button type="button" className={'tasker-option' + (thinkingMode ? ' is-selected' : '')} onClick={() => setThinkingMode(!thinkingMode)}>
+              <FiZap aria-hidden="true" /><span>Extended reasoning</span>
+            </button>
+          </div>
+          <button className="tasker-submit" type="submit" disabled={!messageText.trim()}>
+            <span>Run task</span><FiArrowUpRight aria-hidden="true" />
+          </button>
+        </div>
+        <p id="tasker-command-help" className="tasker-compose-note">
+          Tasker will ask the model for actions only after it has the current desktop context.
+        </p>
+      </form>
+
+      <section className="tasker-runbook" aria-label="How Tasker works">
+        <div className="tasker-section-label">The operating model</div>
+        <div className="tasker-runbook-grid">
+          <article><span>01</span><h2>Intent</h2><p>Your request becomes a focused desktop task.</p></article>
+          <article><span>02</span><h2>Motion</h2><p>Lobe A executes action batches while B prepares the next boundary.</p></article>
+          <article><span>03</span><h2>Proof</h2><p>The screen observer checks the transition before handoff.</p></article>
+        </div>
+      </section>
+    </main>
   );
 }
