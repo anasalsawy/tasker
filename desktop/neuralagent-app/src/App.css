@@ -966,3 +966,21 @@ a:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+.tasker-auth-wordmark {
+  color: var(--tasker-accent);
+  font: 800 20px var(--tasker-mono);
+  letter-spacing: 0.14em;
+}
+
+.tasker-overlay-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--tasker-accent);
+  border-radius: 8px;
+  color: var(--tasker-accent);
+  font: 800 16px var(--tasker-mono);
+}
