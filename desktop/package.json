@@ -1,7 +1,7 @@
 {
-  "name": "neuralagent-desktop",
+  "name": "tasker-desktop",
   "version": "1.5.2",
-  "description": "NeuralAgent Electron Desktop Application",
+  "description": "Tasker Electron Desktop Application",
   "license": "ISC",
   "author": "",
   "type": "module",
@@ -10,16 +10,16 @@
     "start": "concurrently \"npm run react-start\" \"wait-on http://localhost:6763 && electron .\"",
     "react-start": "cd neuralagent-app && npm start",
     "react-build": "cd neuralagent-app && npm run build",
-    "build:agent": "\"aiagent\\venv\\Scripts\\pyinstaller\" --clean --noconfirm --onefile --name agent --distpath agent_build/ aiagent/main.py",
-    "build:suggestor": "\"aiagent\\venv\\Scripts\\pyinstaller\" --clean --noconfirm --onefile --name suggestor --distpath agent_build/ aiagent/suggestor.py",
-    "build:agent:nuitko": "\"aiagent\\venv\\Scripts\\nuitka\" ---standalone --onefile --lto=no --output-dir=agent_build/ --output-filename=agent --assume-yes-for-downloads --include-package=comtypes aigent/main.py",
-    "build:suggestor:nuitko": "\"aiagent\\venv\\Scripts\\nuitka\" ---standalone --onefile --lto=no --output-dir=agent_build/ --output-filename=suggestor --assume-yes-for-downloads --include-package=comtypes aigent/suggestor.py",
+    "build:agent": "pyinstaller --clean --noconfirm --onefile --name agent --distpath agent_build/ aiagent/main.py",
+    "build:suggestor": "pyinstaller --clean --noconfirm --onefile --name suggestor --distpath agent_build/ aiagent/suggestor.py",
+    "build:agent:nuitko": "nuitka --standalone --onefile --lto=no --output-dir=agent_build/ --output-filename=agent --assume-yes-for-downloads --include-package=comtypes aiagent/main.py",
+    "build:suggestor:nuitko": "nuitka --standalone --onefile --lto=no --output-dir=agent_build/ --output-filename=suggestor --assume-yes-for-downloads --include-package=comtypes aiagent/suggestor.py",
     "build": "npm run react-build && electron-builder",
     "dev": "electron ."
   },
   "build": {
-    "appId": "com.getneuralagent.desktop",
-    "productName": "NeuralAgent",
+    "appId": "com.tasker.desktop",
+    "productName": "Tasker",
     "directories": {
       "buildResources": "assets",
       "output": "dist"
