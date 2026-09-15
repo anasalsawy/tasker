@@ -44,7 +44,7 @@ export default function BackgroundAuth() {
       <FrameWrapper>
         <iframe
           src="http://127.0.0.1:39742/vnc.html?autoconnect=true&bell=off"
-          title="NeuralAgent VNC Session"
+          title="Tasker VNC Session"
         />
       </FrameWrapper>
     </Container>
