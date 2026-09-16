@@ -190,6 +190,51 @@ def signup(user_create: UserCreate, db: Session = Depends(get_session)):
     }
 
 
+def _dev_auth_enabled():
+    return os.getenv('TASKER_DEV_AUTH_BYPASS', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+@router.post('/dev_login')
+def dev_login(db: Session = Depends(get_session)):
+    if not _dev_auth_enabled():
+        raise CustomError(status.HTTP_404_NOT_FOUND, 'Development auth bypass is disabled')
+
+    dev_email = 'tasker-dev@local.invalid'
+    user = db.exec(select(User).where(User.email == dev_email)).first()
+
+    if not user:
+        user = User(
+            name='Tasker Local User',
+            image=None,
+            email=dev_email,
+            password=None,
+            google_user_id=None,
+            google_token=None,
+            user_type=UserType.NORMAL_USER,
+            is_email_verified=True,
+            is_blocked=False,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    exp = datetime.datetime.now(datetime.UTC) + constants.ACCESS_TOKEN_LIFETIME_DELTA
+    login_session = create_login_session(user, db, exp, 'windows')
+    token, refresh_token = create_token_from_user(user, exp, login_session.id)
+
+    return {
+        'token': token,
+        'refresh_token': refresh_token,
+        'user': UserInfo(
+            id=user.id,
+            name=user.name,
+            email=user.email,
+            image=user.image,
+            is_email_verified=user.is_email_verified,
+        ),
+    }
+
+
 @router.post('/logout')
 def logout(logout_obj: Logout, db: Session = Depends(get_session)):
     payload = decode_token(logout_obj.access_token)
