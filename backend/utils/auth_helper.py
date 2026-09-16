@@ -9,9 +9,11 @@ from .procedures import CustomError
 import os
 
 
-# Constants (replace with your own values or configurations)
-JWT_SECRET = os.getenv('JWT_SECRET')
-JWT_ISS = os.getenv('JWT_ISS')
+# Local defaults are intentionally available only when the explicit development
+# auth bypass is enabled. Production deployments must set both values.
+_dev_auth_bypass = os.getenv('TASKER_DEV_AUTH_BYPASS', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+JWT_SECRET = os.getenv('JWT_SECRET') or ('tasker-local-development-secret' if _dev_auth_bypass else None)
+JWT_ISS = os.getenv('JWT_ISS') or ('TaskerBackend' if _dev_auth_bypass else None)
 JWT_AUDIENCE_CLAIM = 'NeuralAgent'
 
 
