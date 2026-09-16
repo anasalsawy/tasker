@@ -70,16 +70,21 @@ For local agent testing without an account, set both of these flags to true:
     TASKER_DEV_AUTH_BYPASS=true
     REACT_APP_DEV_AUTH_BYPASS=true
 
-This creates a local development user and opens Tasker directly. Do not enable this on a shared or production backend.
+For the self-contained local bypass, also set this in backend\.env:
 
-After the PostgreSQL values are configured in backend\.env, create/update the database schema:
+    DB_CONNECTION_STRING=sqlite:///./tasker-local.db
+
+Leave DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD, and REDIS_CONNECTION blank for this local mode. The backend creates the SQLite schema automatically at startup, so do not run Alembic for this mode. This creates a local development user and opens Tasker directly. Do not enable the bypass on a shared or production backend.
+
+If you are using PostgreSQL with normal authentication instead, configure the PostgreSQL values in backend\.env and run:
 
     cd backend
     py -m alembic upgrade head
 
 Start the backend in this PowerShell window:
 
-    py -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    cd C:\Projects\tasker\backend
+    py -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 
 Open a second PowerShell window and start the Tasker desktop app:
 
