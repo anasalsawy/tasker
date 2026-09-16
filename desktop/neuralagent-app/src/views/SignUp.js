@@ -65,7 +65,11 @@ function SignUp() {
       window.location.reload();
     }).catch((error) => {
       dispatch(setLoadingDialog(false));
-      dispatch(setError(true, constants.GENERAL_ERROR));
+      const serverMessage = error?.response?.data?.message || error?.response?.data?.detail;
+      const message = !error?.response
+        ? 'Cannot reach the Tasker backend at ' + constants.BASE_URL + '. Start Uvicorn and check the frontend .env file.'
+        : (serverMessage || constants.GENERAL_ERROR);
+      dispatch(setError(true, message));
       setTimeout(() => {
         dispatch(setError(false, ''));
       }, 3000);
