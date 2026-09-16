@@ -58,10 +58,15 @@ function Login() {
       window.location.reload();
     }).catch((error) => {
       dispatch(setLoadingDialog(false));
-      if (error.response.status === constants.status.UNAUTHORIZED) {
+      const status = error?.response?.status;
+      const serverMessage = error?.response?.data?.message || error?.response?.data?.detail;
+
+      if (status === constants.status.UNAUTHORIZED) {
         dispatch(setError(true, 'Incorrect Email or Password, Please try again.'));
+      } else if (!error?.response) {
+        dispatch(setError(true, 'Cannot reach the Tasker backend at ' + constants.BASE_URL + '. Start Uvicorn and check the frontend .env file.'));
       } else {
-        dispatch(setError(true, constants.GENERAL_ERROR));
+        dispatch(setError(true, serverMessage || constants.GENERAL_ERROR));
       }
       setTimeout(() => {
         dispatch(setError(false, ''));
