@@ -10,7 +10,7 @@ import LoadingDialog from './components/LoadingDialog';
 import FullLoading from './components/FullLoading';
 import constants from './utils/constants';
 import MessageBar from './components/Elements/MessageBar';
-import { setAppLoading, setUser, setAccessToken, setLoadingDialog } from './store';
+import { setAppLoading, setUser, setAccessToken, setLoadingDialog, setError } from './store';
 import RedirectTo from './components/RedirectTo';
 import axios from './utils/axios';
 import { logoutUser, refreshToken } from './utils/helpers';
