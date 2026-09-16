@@ -112,10 +112,11 @@ function App() {
       dispatch(setUser(response.data));
       dispatch(setAppLoading(false));
     }).catch((error) => {
-      if (error.response.status === constants.status.UNAUTHORIZED) {
+      if (error?.response?.status === constants.status.UNAUTHORIZED) {
         refreshToken();
       } else {
         dispatch(setAppLoading(false));
+        dispatch(setError(true, 'Cannot reach the Tasker backend at ' + constants.BASE_URL + '.'));
       }
     });
   };
