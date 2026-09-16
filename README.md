@@ -63,6 +63,14 @@ The frontend .env should contain:
     REACT_APP_WEBSOCKET_PROTOCOL=ws
     REACT_APP_DNS=127.0.0.1:8000
     REACT_APP_API_KEY=
+    REACT_APP_DEV_AUTH_BYPASS=false
+
+For local agent testing without an account, set both of these flags to true:
+
+    TASKER_DEV_AUTH_BYPASS=true
+    REACT_APP_DEV_AUTH_BYPASS=true
+
+This creates a local development user and opens Tasker directly. Do not enable this on a shared or production backend.
 
 After the PostgreSQL values are configured in backend\.env, create/update the database schema:
 
