@@ -35,6 +35,10 @@ target_metadata = SQLModel.metadata
 
 
 def get_db_url():
+    connection_string = os.getenv('DB_CONNECTION_STRING', '').strip()
+    if connection_string:
+        return connection_string
+
     return ('postgresql://' + os.getenv('DB_USERNAME') + ':' + os.getenv('DB_PASSWORD') +
             '@' + os.getenv('DB_HOST') + ':' + os.getenv('DB_PORT') + '/' + os.getenv('DB_DATABASE'))
 
