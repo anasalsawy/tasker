@@ -18,6 +18,8 @@ import { OverlayContainer } from './layouts/Containers';
 import TaskerSidebar from './layouts/TaskerSidebar';
 import { useLocation } from 'react-router-dom';
 
+const DEV_AUTH_BYPASS = process.env.REACT_APP_DEV_AUTH_BYPASS === 'true';
+
 import Login from './views/Login';
 import SignUp from './views/SignUp';
 import Home from './views/Home';
@@ -89,6 +91,23 @@ function App() {
   const dispatch = useDispatch();
   useEffect(() => {
     const asyncTask = async () => {
+      if (DEV_AUTH_BYPASS) {
+        try {
+          const response = await axios.post('/auth/dev_login');
+          const { token, refresh_token, user } = response.data;
+          window.electronAPI.setToken(token);
+          window.electronAPI.setRefreshToken(refresh_token);
+          dispatch(setAccessToken(token));
+          dispatch(setUser(user));
+          dispatch(setAppLoading(false));
+        } catch (error) {
+          dispatch(setAppLoading(false));
+          const serverMessage = error?.response?.data?.message || error?.response?.data?.detail;
+          dispatch(setError(true, serverMessage || 'Development auth bypass failed. Check the backend and database.'));
+        }
+        return;
+      }
+
       const storedAccessToken = await window.electronAPI.getToken();
       console.log(storedAccessToken);
       if (storedAccessToken !== undefined && storedAccessToken !== null) {
