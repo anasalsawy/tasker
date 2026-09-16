@@ -18,7 +18,6 @@ import { OverlayContainer } from './layouts/Containers';
 import TaskerSidebar from './layouts/TaskerSidebar';
 import { useLocation } from 'react-router-dom';
 
-const DEV_AUTH_BYPASS = process.env.REACT_APP_DEV_AUTH_BYPASS === 'true';
 
 import Login from './views/Login';
 import SignUp from './views/SignUp';
@@ -28,6 +27,8 @@ import Overlay from './views/Overlay';
 import BackgroundAuth from './views/BackgroundAuth';
 import BackgroundTask from './views/BackgroundTask';
 import BackgroundSetup from './views/BackgroundSetup';
+
+const DEV_AUTH_BYPASS = process.env.REACT_APP_DEV_AUTH_BYPASS === 'true';
 
 function AppRoutes() {
   const location = useLocation();
