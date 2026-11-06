@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FiActivity, FiMic, FiMicOff, FiMoon, FiSend, FiSquare, FiZap } from 'react-icons/fi';
+import { FiActivity, FiMic, FiMicOff, FiSend, FiSquare, FiZap } from 'react-icons/fi';
 import { useSelector } from 'react-redux';
 import axios from '../utils/axios';
 import constants from '../utils/constants';
@@ -26,7 +26,6 @@ export default function Overlay() {
   const [loading, setLoading] = useState(false);
   const [runningThreadId, setRunningThreadId] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
-  const [backgroundMode, setBackgroundMode] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
   const [handsFree, setHandsFree] = useState(true);   // operator toggle — default = continuous
   const [listening, setListening] = useState(false);
@@ -147,7 +146,6 @@ export default function Overlay() {
     try {
       const response = await axios.post('/threads', {
         task: text,
-        background_mode: backgroundMode,
         extended_thinking_mode: thinkingMode,
       }, { headers: { Authorization: 'Bearer ' + accessToken } });
       const data = response.data;
@@ -160,19 +158,11 @@ export default function Overlay() {
       }
       if (data.type === 'desktop_task') {
         hands.dispatch({ kind: 'task_recognized', title: text });
-        const wantsBackground = backgroundMode || data.is_background_mode_requested;
-        const wantsThinking = thinkingMode || data.is_extended_thinking_mode_requested;
-        setBackgroundMode(Boolean(wantsBackground));
-        setThinkingMode(Boolean(wantsThinking));
-        window.electronAPI.setLastThinkingModeValue(String(Boolean(wantsThinking)));
         threadIdRef.current = data.thread_id;
         setRunningThreadId(data.thread_id);
-        window.electronAPI.launchAIAgent(
-          constants.SERVER_URL,
-          data.thread_id, wantsBackground);
+        // Persona streaming starts via hands.streamAct on the next user turn
+        // (dispatchUser checks runningThreadId). No legacy agent launch needed.
       } else if (data.thread_id) {
-        // Chat in an existing thread: attach persona stream so voice keeps flowing
-        // for the next turn on this thread.
         threadIdRef.current = data.thread_id;
       }
     } catch (error) {
@@ -222,17 +212,6 @@ export default function Overlay() {
     }
   };
 
-  const onBGModeToggleChange = async (value) => {
-    if (value) {
-      const ready = await window.electronAPI.isBackgroundModeReady();
-      if (!ready) {
-        window.electronAPI.startBackgroundSetup();
-        return;
-      }
-    }
-    setBackgroundMode(value);
-  };
-
   useEffect(() => {
     if (window.electronAPI?.onAIAgentLaunch) {
       window.electronAPI.onAIAgentLaunch((threadId) => {
@@ -258,10 +237,8 @@ export default function Overlay() {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const background = await window.electronAPI.getLastBackgroundModeValue();
         const thinking = await window.electronAPI.getLastThinkingModeValue();
         const hf = await window.electronAPI.getHandsFreeValue && await window.electronAPI.getHandsFreeValue();
-        setBackgroundMode(background === 'true');
         setThinkingMode(thinking === 'true');
         if (hf !== undefined && hf !== null) setHandsFree(hf !== 'false');
       } catch (e) { /* browser preview without electron */ }
@@ -326,7 +303,6 @@ export default function Overlay() {
                         title={handsFree ? 'Hands-free voice ON' : 'Voice off'}>
                   {handsFree ? <FiMic /> : <FiMicOff />}
                 </button>
-                <button className={'tasker-overlay-option ' + (backgroundMode ? 'is-selected' : '')} onClick={() => onBGModeToggleChange(!backgroundMode)} aria-label="Toggle background mode"><FiMoon /></button>
                 <button className={'tasker-overlay-option ' + (thinkingMode ? 'is-selected' : '')} onClick={() => setThinkingMode(!thinkingMode)} aria-label="Toggle extended reasoning"><FiZap /></button>
                 <input
                   className="tasker-overlay-input"

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FiActivity, FiArrowUpRight, FiLayers, FiMic, FiMonitor, FiMoon, FiZap } from 'react-icons/fi';
+import { FiActivity, FiArrowUpRight, FiLayers, FiMic, FiMonitor, FiZap } from 'react-icons/fi';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/axios';
@@ -13,7 +13,6 @@ const PERSONA_BASE = constants.SERVER_URL + '/aiagent/persona';
 
 export default function Home() {
   const [messageText, setMessageText] = useState('');
-  const [backgroundMode, setBackgroundMode] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
   const [handsFree, setHandsFree] = useState(false);
   const accessToken = useSelector((state) => state.accessToken);
@@ -57,64 +56,25 @@ export default function Home() {
     try {
       const response = await axios.post(
         '/threads',
-        {
-          task,
-          background_mode: backgroundMode,
-          extended_thinking_mode: thinkingMode,
-        },
+        { task, extended_thinking_mode: thinkingMode },
         { headers: { Authorization: 'Bearer ' + accessToken } }
       );
       const data = response.data;
       if (data.type === 'desktop_task') {
         hands.dispatch({ kind: 'task_recognized', title: task });
-        const wantsBackground = backgroundMode || data.is_background_mode_requested;
-        const wantsThinking = thinkingMode || data.is_extended_thinking_mode_requested;
-        if (wantsBackground && !backgroundMode) {
-          const ready = await window.electronAPI.isBackgroundModeReady();
-          if (!ready) {
-            await axios.post('/threads/' + data.thread_id + '/cancel_task', {}, {
-              headers: { Authorization: 'Bearer ' + accessToken },
-            });
-            window.electronAPI.startBackgroundSetup();
-            return;
-          }
-        }
-        setBackgroundMode(Boolean(wantsBackground));
-        setThinkingMode(Boolean(wantsThinking));
-        window.electronAPI.setLastThinkingModeValue(String(Boolean(wantsThinking)));
-        window.electronAPI.launchAIAgent(
-          constants.SERVER_URL,
-          data.thread_id,
-          wantsBackground
-        );
       } else if (data.response) {
-        // Plain conversation -> stays chat. The surface does NOT enter
-        // execution position; the reply just lands in the lane.
         hands.dispatch({ kind: 'chat_reply', text: data.response });
       }
+      // Navigate to thread — Thread.js handles persona streaming from there.
       navigate('/threads/' + data.thread_id);
     } catch (error) {
-      const message = error.response?.data?.message === 'Not_Browser_Task_BG_Mode'
-        ? 'Background mode is limited to browser tasks.'
-        : constants.GENERAL_ERROR;
-      dispatch(setError(true, message));
+      dispatch(setError(true, constants.GENERAL_ERROR));
       window.setTimeout(() => dispatch(setError(false, '')), 3500);
     } finally {
       dispatch(setLoadingDialog(false));
     }
   };
   composerRef.current = createThread;
-
-  const onBGModeToggleChange = async (value) => {
-    if (value) {
-      const ready = await window.electronAPI.isBackgroundModeReady();
-      if (!ready) {
-        window.electronAPI.startBackgroundSetup();
-        return;
-      }
-    }
-    setBackgroundMode(value);
-  };
 
   const handleTextEnterKey = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -126,10 +86,8 @@ export default function Home() {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const background = await window.electronAPI.getLastBackgroundModeValue();
         const thinking = await window.electronAPI.getLastThinkingModeValue();
         const hf = await window.electronAPI.getHandsFreeValue();
-        setBackgroundMode(background === 'true');
         setThinkingMode(thinking === 'true');
         setHandsFree(hf !== 'false'); // hands-free default: ON
       } catch (e) { /* browser preview without the electron shell */ }
@@ -198,9 +156,6 @@ export default function Home() {
                     aria-pressed={handsFree}
                     title="Hands-free: mic stays open continuously — no push-to-talk">
               <FiMic aria-hidden="true" /><span>Hands-free {handsFree ? 'on' : 'off'}</span>
-            </button>
-            <button type="button" className={'tasker-option' + (backgroundMode ? ' is-selected' : '')} onClick={() => onBGModeToggleChange(!backgroundMode)}>
-              <FiMoon aria-hidden="true" /><span>Background</span>
             </button>
             <button type="button" className={'tasker-option' + (thinkingMode ? ' is-selected' : '')} onClick={() => setThinkingMode(!thinkingMode)}>
               <FiZap aria-hidden="true" /><span>Extended reasoning</span>
