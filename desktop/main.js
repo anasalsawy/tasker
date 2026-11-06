@@ -731,7 +731,13 @@ if (!gotLock) {
 
 app.whenReady().then(() => {
   ensureDeviceId();
-  initAutoUpdater();
+  // The updater is optional: a throw here (CJS interop, missing update feed,
+  // etc.) must never prevent the main window from opening.
+  try {
+    initAutoUpdater();
+  } catch (err) {
+    console.error('[updater] initAutoUpdater failed, continuing without auto-update:', err);
+  }
   createWindow();
   if (store.get(constants.ACCESS_TOKEN_STORE_KEY)) {
     createOverlayWindow();

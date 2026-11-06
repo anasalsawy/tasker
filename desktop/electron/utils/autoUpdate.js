@@ -1,8 +1,15 @@
 // Hands auto-update via GitHub Releases (anasalsawy/tasker).
 // Never touches Railway: the updater channel is GitHub Releases only.
 import { app, ipcMain, BrowserWindow } from 'electron';
-import { autoUpdater } from 'electron-updater';
+// electron-updater is CommonJS and lazy-defines `autoUpdater` via
+// Object.defineProperty, which cjs-module-lexer cannot detect as a named
+// export. The packaged app loads main-process code as ESM, so a named import
+// here throws "Named export 'autoUpdater' not found" before the window opens.
+// Default-import the module namespace and destructure instead.
+import updaterPkg from 'electron-updater';
 import isDev from 'electron-is-dev';
+
+const { autoUpdater } = updaterPkg;
 
 const state = {
   status: 'idle', // idle | checking | available | downloaded | error | unsupported | offline
