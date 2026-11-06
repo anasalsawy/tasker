@@ -67,6 +67,14 @@ class CallLane:
         frame = dict(ev)
         frame.update({"call_id": self.call_id, "lane": self.lane,
                       "seq": self.seq, "ts": round(time.time(), 3)})
+        # Mirror onto the lane/tool bus so a lane is ONE event surface, whether
+        # the frame came from a phone call or from needs_user/route_decision.
+        # Imported lazily + guarded: the bus must never break a live call.
+        try:
+            from utils import lane_bus as _lb
+            _lb.publish(self.tid, {"kind": "call_event", "call_kind": kind, **frame})
+        except Exception:  # noqa: BLE001 — observability never sinks the caller
+            log.debug("lane_bus mirror failed for %s", self.call_id, exc_info=True)
         if kind == "call_status":
             self.state = str(frame.get("state") or self.state)
             if self.state in ("ended", "failed"):

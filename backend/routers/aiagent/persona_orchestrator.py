@@ -36,6 +36,11 @@ from utils.agentic_tools import run_tool_server_side
 from utils.procedures import CustomError
 
 from persona_client import PersonaClient, lane_of, HANDS_PERSONA_KEY
+from utils import lane_bus as lb
+
+# ── Routing contract injected into the persona's per-turn system context ──────
+# (The companion-side builders mirror these two blocks verbatim; see
+#  sawii-persona/src/sawii_persona/kernel/lane_routing.py.)
 
 log = logging.getLogger(__name__)
 
@@ -64,8 +69,15 @@ def _build_messages(
     thread: Thread,
     task: Optional[ThreadTask],
     req: PersonaActRequest,
+    bus_steers: Optional[list[tuple[Optional[str], str]]] = None,
 ) -> list[dict[str, Any]]:
+    """The turn's messages. `bus_steers` = lane-addressed instructions queued on
+    the host bus since the last turn (needs_user answers + validated
+    route_decision steers); act() folds the same list into the x-sawii-steer
+    header rail. Rail 1 (timeline text) is appended here.
+    """
     msgs: list[dict[str, Any]] = []
+    bus_steers = list(bus_steers or [])
 
     # One concise host-side system context: who the persona is working for,
     # what the environment IS right now. Lane/tool fan-out lives in the
@@ -84,12 +96,27 @@ def _build_messages(
 
     msgs.append({"role": "system", "content": "\n".join(env_lines)})
 
+    # ── lane routing contract (utils/lane_bus.py) ────────────────────────────
+    # One shared mind, but only ONE lobe owns each message. L is the router;
+    # R lanes are readers of the shared timeline, not listeners of the human.
+    # Blocks are labelled by role so any lane can tell which rules bind it.
+    ctx_lines = [lb.router_block(), "", lb.lane_addressing_rules()]
+    _needs_block = lb.needs_block_for_prompt(thread.id)
+    if _needs_block:
+        ctx_lines.append("")
+        ctx_lines.append(_needs_block)
+    ctx_lines.append("")
+    ctx_lines.append(lb.active_lanes_note(thread.id))
+    msgs.append({"role": "system", "content": "\n".join(ctx_lines)})
+
     # Queued mid-call steers (user voice -> text -> MODEL only). At the start of
     # this turn the persona hears everything typed while a call lane was live.
     from utils import call_lane as _cl
     _call_steers = _cl.consume_model_steers(thread.id)
 
     if req.text.strip():
+        # Rail-ownership note: an unaddressed user turn is L's to classify.
+        # R lanes read it for awareness only (see the addressing block above).
         msgs.append({"role": "user", "content": req.text})
     elif req.tool_results:
         # Tool-result follow-up turn: the persona keeps going from its own results.
@@ -99,13 +126,19 @@ def _build_messages(
     # timeline as a user turn too, so any persona server reads them — while the
     # x-sawii-steer header is rail 2 for new servers. Call steering NEVER sounds
     # like far-end audio; the provider's speaker set never includes the user.
+    # Bus-steers (needs_user answers + validated route_decision steers) ride the
+    # SAME rail as `ln=<lane>=...` — one owner per line, never a broadcast.
     steer_bits: list[str] = []
     if req.steer and req.steer.strip():
         steer_bits.append("ln=" + req.steer.strip()[:512])
     if _call_steers:
         steer_bits.extend("[call steer] " + s[:512] for s in _call_steers[:6])
+    for _ln, _txt in bus_steers:
+        # A bus steer already carries its own lane address, so the shape inside
+        # the joint `[steering]` line is exactly `ln=<lane>=<instruction>`.
+        steer_bits.append((f"ln={_ln}=" if _ln else "ln=?=") + _txt[:480])
     if steer_bits:
-        msgs.append({"role": "user", "content": "[steering] " + " ; ".join(steer_bits)[:512]})
+        msgs.append({"role": "user", "content": "[steering] " + " ; ".join(steer_bits)[:2000]})
 
     # OpenAI-shape tool results: one message per completed call. Persona's own
     # code reads tool_call_id -> lane -> which R-line asked.
@@ -168,10 +201,42 @@ TASKER_TOOLS: list[dict[str, Any]] = [
                                       "parameters": {"type": "object", "properties": {"call_id": {"type": "string"}, "lane": {"type": "string"}, "reason": {"type": "string"}}, "required": []}}},
     {"type": "function", "function": {"name": "get_calls", "description": "List this thread's call lanes (id, lane, state, number).",
                                       "parameters": {"type": "object", "properties": {}, "required": []}}},
+    # ── Lane routing / needs_user rail (see utils/lane_bus.py) ────────────────
+    # A busy R lane pauses on the human WITHOUT blocking the turn: needs_user
+    # registers an open question and publishes it on the bus; lobe L narrates it.
+    # The human's answer returns to THIS lane only as `ln=<lane>=answer: ...`.
+    {"type": "function", "function": {"name": "needs_user", "description": "Raise a question/blocker to the human from this execution lane. Non-blocking: returns a need_id immediately, the lane keeps working, and the answer arrives later as 'ln=<your lane>=answer: ...' steering. Lobe L narrates the question — never ask the same thing twice.",
+                                      "parameters": {"type": "object", "properties": {
+                                          "question": {"type": "string", "description": "The one thing you need from the human, phrased the way L should say it."},
+                                          "blocker": {"type": "string", "description": "What you cannot do without it."},
+                                          "context": {"type": "string", "description": "Short state so the human can answer in one line."},
+                                          "choices": {"type": "array", "items": {"type": "string"}, "description": "Optional 2-8 answers to offer (yes/no, A/B)."},
+                                          "lane": {"type": "string", "description": "Your lane id (ln...). Optional — the caller's lane id is used when omitted."},
+                                          "timeout_s": {"type": "number", "description": "Advisory only (positive seconds)."}},
+                                          "required": ["question"]}}},
+    {"type": "function", "function": {"name": "answer_lane_need", "description": "Route the human's answer back to the ONE lane that asked for it. Marks the need answered and queues 'ln=<lane>=answer: <text>' steering.",
+                                      "parameters": {"type": "object", "properties": {
+                                          "need_id": {"type": "string", "description": "need_id from the needs_user event / [lane needs_user] block."},
+                                          "text": {"type": "string", "description": "What the human said."}},
+                                          "required": ["need_id", "text"]}}},
+    {"type": "function", "function": {"name": "get_open_needs", "description": "List this thread's open needs_user questions (need_id, lane, question, choices, asked_at).",
+                                      "parameters": {"type": "object", "properties": {}, "required": []}}},
+    # L's router decision as DATA, so "one owner, never broadcast" is validated
+    # in code: steering a lane that is not live on this thread is REFUSED.
+    {"type": "function", "function": {"name": "route_decision", "description": "Lobe L's structured routing decision for the latest user message. Exactly one owner per instruction. 'steer' targets ONE existing lane id (validated against the live lane list); an ambiguous message gets one owner or a clarifying question in chat — never a broadcast.",
+                                      "parameters": {"type": "object", "properties": {
+                                          "decision": {"type": "string", "enum": list(lb.ROUTE_DECISIONS),
+                                                       "description": "chat = answer in conversation; steer = hand it to one lane; new_task = spawn a new R lane; surface_need = narrate a lane's open needs_user question."},
+                                          "lane_id": {"type": "string", "description": "Target lane (ln...) for 'steer', or the asking lane for 'surface_need'."},
+                                          "instruction": {"type": "string", "description": "The instruction to hand that lane (required for 'steer')."},
+                                          "need_id": {"type": "string", "description": "Optional need_id for 'surface_need'."}},
+                                          "required": ["decision"]}}},
 ]
 
-# Host tools that run as server-side call-lane actions (not client actions).
-_LANE_TOOLS = {"start_call", "say_on_call", "end_call", "get_calls"}
+# Host tools that run as server-side lane actions (not client actions):
+# phone-call lanes plus the routing / needs_user rail.
+_LANE_TOOLS = {"start_call", "say_on_call", "end_call", "get_calls",
+               "needs_user", "answer_lane_need", "get_open_needs", "route_decision"}
 
 
 async def _run_server_tool(name: str, arguments: dict[str, Any]) -> str:
@@ -197,6 +262,29 @@ async def _run_lane_tool(name: str, arguments: dict[str, Any], tid: str,
                  "to": ln.handle.to, "seq": ln.seq}
                 for ln in cl.lanes_for_thread(tid)]
         return json.dumps({"ok": True, "calls": live}, ensure_ascii=False)
+    # ── routing / needs_user rail (utils/lane_bus.py) ────────────────────────
+    if name == "needs_user":
+        try:
+            rec = lb.ask_user(tid, lane_id or arguments.get("lane"),
+                              question=arguments.get("question", ""),
+                              blocker=arguments.get("blocker", ""),
+                              context=arguments.get("context", ""),
+                              choices=arguments.get("choices") or None,
+                              timeout_s=arguments.get("timeout_s"))
+            return json.dumps({"ok": True, **rec}, ensure_ascii=False)
+        except ValueError as exc:
+            return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+    if name == "answer_lane_need":
+        return json.dumps(lb.answer_need(tid, arguments.get("need_id", ""),
+                                         arguments.get("text", "")), ensure_ascii=False)
+    if name == "get_open_needs":
+        return json.dumps({"ok": True, "needs": lb.open_needs(tid)}, ensure_ascii=False)
+    if name == "route_decision":
+        out = lb.route_decision(tid, arguments.get("decision", ""),
+                                lane=arguments.get("lane_id"),
+                                instruction=arguments.get("instruction", ""),
+                                need_id=arguments.get("need_id", ""))
+        return json.dumps(out, ensure_ascii=False)
     raise ValueError(f"Unsupported lane tool: {name}")
 
 
@@ -209,6 +297,9 @@ async def _run_call(call: dict[str, Any], tid: Optional[str] = None) -> dict[str
         args = json.loads(args_str)
     except ValueError:
         args = {}
+    # A lane that just emitted a tool call is live: it becomes a legal
+    # route_decision(steer) target until the roster ages out.
+    lb.note_lane_activity(tid or "", lane_of(call.get("id") or ""), name)
     try:
         if name in _SERVER_TOOL_NAMES:
             result = await _run_server_tool(name, args if isinstance(args, dict) else {})
@@ -254,6 +345,20 @@ def _sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def _merge_steer(req_steer: Optional[str],
+                 bus_steers: list[tuple[Optional[str], str]]) -> Optional[str]:
+    """Rail 2 (x-sawii-steer): the request's own steer plus every lane-addressed
+    steer queued on the host bus since the last turn. Comma-joined `ln=<id>=text`
+    (persona_client contract); bus steers are lane-owner-checked upstream by
+    route_decision/answer_need, so one line per lane maximum."""
+    bits: list[str] = []
+    if req_steer and req_steer.strip():
+        bits.append(req_steer.strip()[:512])
+    bits.extend(f"{ln}={txt[:480]}" for ln, txt in bus_steers if ln)
+    joined = ",".join(bits)[:512]
+    return joined or None
+
+
 @router.post("/{tid}/act")
 async def act(tid: str, req: PersonaActRequest, request: Request,
               db: Session = Depends(get_session),
@@ -275,19 +380,36 @@ async def act(tid: str, req: PersonaActRequest, request: Request,
         api_key=os.getenv("SAWII_PERSONA_KEY", "") or HANDS_PERSONA_KEY,
     )
 
-    messages = _build_messages(instance, task, req)
+    # Drain the host lane bus ONCE for this turn: lane-addressed steering
+    # (needs_user answers, validated route_decision steers) goes out on rail 1
+    # (timeline text, via _build_messages) and on rail 2 (x-sawii-steer header).
+    bus_steers = lb.consume_lane_steers(tid)
+    lb.maybe_expire_needs(tid)
+    steer_header = _merge_steer(req.steer, bus_steers)
+
+    messages = _build_messages(instance, task, req, bus_steers)
 
     async def event_gen():
         full_text_parts: list[str] = []
         outstanding: list[asyncio.Task] = []
         call_tasks: dict[str, asyncio.Task] = {}
         calls_meta: dict[str, dict] = {}
+        # This stream mirrors the thread's lane bus: every needs_user question,
+        # answer, route and call frame published during the turn goes out as
+        # `event: lane` — one event surface for the client UI. (The persistent
+        # surface is GET /{tid}/lane_events for out-of-turn frames.)
+        bus_q = lb.subscribe(tid)
+
+        def _bus_frames():
+            return [_sse("lane", f) for f in lb.drain(bus_q)]
 
         try:
             async for ev in client.stream_turn(messages=messages, tools=TASKER_TOOLS,
                                               session_id=req.session_id,
                                               tz=req.timezone,
-                                              steer=req.steer):
+                                              steer=steer_header):
+                for frame in _bus_frames():
+                    yield frame
                 if ev["type"] == "delta":
                     full_text_parts.append(ev["text"])
                     yield _sse("delta", {"text": ev["text"]})
@@ -323,16 +445,22 @@ async def act(tid: str, req: PersonaActRequest, request: Request,
                     r = t.result()
                     pending_tools.append(r)
                     yield _sse("tool_result", r)
+            # Final bus flush: needs_user frames raised by this turn's lane
+            # tools went out while the stream was already closing.
+            for frame in _bus_frames():
+                yield frame
 
             yield _sse("done", {
                 "text": "".join(full_text_parts),
                 "tools_pending_client": [r for r in pending_tools if r.get("executed_in") == "client"],
+                "open_needs": lb.open_needs(tid),
                 "turn_id": None,
             })
         except Exception as exc:  # noqa: BLE001
             log.exception("persona act failed")
             yield _sse("error", {"message": str(exc)})
         finally:
+            lb.unsubscribe(tid, bus_q)
             await client.aclose()
 
     return StreamingResponse(event_gen(), media_type="text/event-stream",
@@ -348,6 +476,18 @@ async def act(tid: str, req: PersonaActRequest, request: Request,
 class CallControlRequest(BaseModel):
     action: str                                  # speak | hold | unhold | steer | hangup
     text: str = ""
+
+
+class RouteRequest(BaseModel):
+    """L's router decision (same fields as the `route_decision` host tool)."""
+    decision: str                                # chat | steer | new_task | surface_need
+    lane_id: str = ""
+    instruction: str = ""
+    need_id: str = ""
+
+
+class LaneNeedAnswer(BaseModel):
+    text: str
 
 
 @router.get("/{tid}/calls")
@@ -397,3 +537,86 @@ async def call_control(tid: str, cid: str, req: CallControlRequest,
     if not out.get("ok"):
         raise CustomError(status.HTTP_400_BAD_REQUEST, out.get("error", "control failed"))
     return out
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Lane routing surfaces (utils/lane_bus.py). The client UI subscribes to
+# GET /{tid}/lane_events for `lane_needs_user` frames and posts the human's
+# answer back with POST /{tid}/needs/{need_id}/answer — the host then queues
+# `ln=<asking lane>=answer: ...`, which the NEXT /act turn ships on both
+# existing steering rails. One destination: the lane that asked. (L can do the
+# same thing in-turn with the answer_lane_need tool.)
+
+
+@router.get("/{tid}/needs")
+async def list_needs(tid: str, user: User = Depends(get_current_user_dependency)):
+    """Open needs_user questions on this thread (oldest first), plus the live
+    lane roster a router steer may target."""
+    return {"needs": lb.open_needs(tid), "active_lanes": lb.active_lanes(tid, limit=lb.MAX_ACTIVE_LANES)}
+
+
+@router.get("/{tid}/needs/{need_id}")
+async def get_need(tid: str, need_id: str,
+                   user: User = Depends(get_current_user_dependency)):
+    rec = _need_or_404(tid, need_id)
+    return {"need": rec}
+
+
+@router.post("/{tid}/needs/{need_id}/answer")
+async def answer_need(tid: str, need_id: str, req: LaneNeedAnswer,
+                      user: User = Depends(get_current_user_dependency)):
+    """Route the human's answer to the ONE lane that asked for it."""
+    _need_or_404(tid, need_id)
+    out = lb.answer_need(tid, need_id, req.text)
+    if not out.get("ok"):
+        raise CustomError(status.HTTP_400_BAD_REQUEST, out.get("error", "answer failed"))
+    return out
+
+
+@router.post("/{tid}/route")
+async def route_lane(tid: str, req: RouteRequest,
+                     user: User = Depends(get_current_user_dependency)):
+    """The host-side router rail as an HTTP surface (same validation as the
+    `route_decision` tool): L — or the app's own router — commits one decision
+    for the latest user message; `steer` is refused unless it names ONE live lane."""
+    out = lb.route_decision(tid, req.decision, lane=req.lane_id,
+                            instruction=req.instruction, need_id=req.need_id)
+    if not out.get("ok"):
+        raise CustomError(status.HTTP_400_BAD_REQUEST,
+                          out.get("error", "route_decision rejected"))
+    return out
+
+
+@router.get("/{tid}/lane_events")
+async def lane_events(tid: str, request: Request,
+                      user: User = Depends(get_current_user_dependency)):
+    """The thread's lane bus as SSE: needs_user questions, answers, timeouts,
+    router decisions and mirrored call frames. Frames are exactly the /act
+    `event: lane` shapes plus {kind, tid, seq, ts}."""
+
+    async def gen():
+        q = lb.subscribe(tid)
+        try:
+            while True:
+                if request is not None and await request.is_disconnected():
+                    return
+                try:
+                    frame = await asyncio.wait_for(q.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                yield _sse(frame.get("kind", "lane_event"), frame)
+        except asyncio.CancelledError:
+            return
+        finally:
+            lb.unsubscribe(tid, q)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _need_or_404(tid: str, need_id: str) -> dict[str, Any]:
+    rec = lb.get_need(tid, need_id)
+    if rec is None:
+        raise CustomError(status.HTTP_404_NOT_FOUND, f"no need {need_id!r} on thread {tid}")
+    return rec
