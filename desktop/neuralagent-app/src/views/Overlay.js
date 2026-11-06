@@ -9,7 +9,7 @@ import { publishHandsStatus } from '../state/handsBus';
 import { createVoiceLane } from '../voice/voiceLane';
 
 // URL of the persona orchestrator (backend router prefix /aiagent/persona).
-const PERSONA_BASE = process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS + '/aiagent/persona';
+const PERSONA_BASE = constants.SERVER_URL + '/aiagent/persona';
 
 /**
  * Overlay — the always-on desktop surface of Hands.
@@ -168,7 +168,7 @@ export default function Overlay() {
         threadIdRef.current = data.thread_id;
         setRunningThreadId(data.thread_id);
         window.electronAPI.launchAIAgent(
-          process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS,
+          constants.SERVER_URL,
           data.thread_id, wantsBackground);
       } else if (data.thread_id) {
         // Chat in an existing thread: attach persona stream so voice keeps flowing
@@ -190,7 +190,7 @@ export default function Overlay() {
   const getSuggestions = async () => {
     try {
       const result = await window.electronAPI.getSuggestions(
-        process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS
+        constants.SERVER_URL
       );
       setSuggestions(result.suggestions || []);
     } catch { setSuggestions([]); }

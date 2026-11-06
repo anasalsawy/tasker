@@ -9,7 +9,7 @@ import useHands from '../hooks/useHands';
 import { createVoiceLane } from '../voice/voiceLane';
 
 // Persona orchestrator prefix (backend/routers/aiagent/persona_orchestrator.py).
-const PERSONA_BASE = process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS + '/aiagent/persona';
+const PERSONA_BASE = constants.SERVER_URL + '/aiagent/persona';
 
 export default function Home() {
   const [messageText, setMessageText] = useState('');
@@ -83,7 +83,7 @@ export default function Home() {
         setThinkingMode(Boolean(wantsThinking));
         window.electronAPI.setLastThinkingModeValue(String(Boolean(wantsThinking)));
         window.electronAPI.launchAIAgent(
-          process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS,
+          constants.SERVER_URL,
           data.thread_id,
           wantsBackground
         );

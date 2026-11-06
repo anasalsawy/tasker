@@ -10,7 +10,7 @@ import ExecutionPet from '../components/ExecutionPet';
 import useHands from '../hooks/useHands';
 import { publishHandsStatus } from '../state/handsBus';
 
-const PERSONA_BASE = process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS + '/aiagent/persona';
+const PERSONA_BASE = constants.SERVER_URL + '/aiagent/persona';
 // persona === new DL-Companion lanes (default). legacy === the original consecutive-agent flow, untouched.
 const PROFILE_PERSONA = 'persona';
 const PROFILE_LEGACY = 'legacy';
@@ -117,7 +117,7 @@ export default function Thread() {
         setThinkingMode(Boolean(wantsThinking));
         window.electronAPI.setLastThinkingModeValue(String(Boolean(wantsThinking)));
         window.electronAPI.launchAIAgent(
-          process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS,
+          constants.SERVER_URL,
           tid,
           wantsBackground
         );
