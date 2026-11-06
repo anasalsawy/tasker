@@ -26,9 +26,9 @@
  */
 
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.HandsCallAudio = factory();
-}(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(root);
+  else root.HandsCallAudio = factory(root);
+}(globalThis, function (root) {
   'use strict';
 
   // Linear G.711 mu-law expansion (decoder only — we never encode here).

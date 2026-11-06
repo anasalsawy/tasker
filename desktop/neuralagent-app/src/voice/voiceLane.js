@@ -13,9 +13,9 @@
  */
 
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.HandsVoice = factory();
-}(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(root);
+  else root.HandsVoice = factory(root);
+}(globalThis, function (root) {
   'use strict';
 
   var SR = (typeof window !== 'undefined') &&
