@@ -1,0 +1,110 @@
+# Tool Manuals — decision-then-idiom
+
+Reference for a computer-use agent: WHEN to reach for each tool, THEN the exact idiom. Check exit codes after anything non-trivial (`$LASTEXITCODE` PowerShell, `$?` bash). Prefer real parsers (jq, sqlite3, pdfplumber) over regex. Read the failure output before retrying; never treat a silenced error as success.
+
+## 1. ripgrep (rg) recipes
+
+Use `rg` for every "find text in files" job — recursive, `.gitignore`-aware, fast. `grep -r` only where rg is absent. Put patterns starting with `-` after `--`.
+
+```
+rg -n --smart-case "TODO" .                 # line numbers; case-ignores unless caps present
+rg -l -g "!**/node_modules/**" "refresh_token"   # filenames only, skip a subtree
+rg -c "ERROR" app.log                       # per-file match counts
+rg -U -o "BEGIN [.#\s\S]*? END" dump        # -U required for multiline; \n never matches without it
+rg -F "^#money[usd]" notes.md               # -F literal: regex chars stay inert
+rg --pcre2 "(?<!\d)\d{16}(?!\d)" cards      # lookaround needs PCRE2 (or -P grep); default engine refuses
+rg -tjs -tts --sort=path "^import " .       # several types, deterministic order
+rg --files-without-match "</footer>" views  # inverse discovery
+rg -o --no-filename "[0-9a-f]{7,40}" | sort -u | wc -l
+```
+
+Steer size first: `rg -l`, then `rg -c`, then `rg -n -A3 -B3` on the two or three files that matter — never dump raw content into the transcript. `--max-columns 240 --max-columns-preview` keeps minified bundles from flooding out. `--json` gives one object per event for `jq`. `-uuu` reveals hidden and ignored files and also matches binary; pair binary work with `--binary`/`--text` so output stays printable. `.rgignore` layers ignore rules under `.gitignore`; `--no-ignore-vcs` keeps your own. `--pre pdftotext --pre-arg='-layout'` (needs GNU-ish shell quoting) indexes formats rg cannot read. PowerShell does NOT glob: quote `--glob "*.ts"` and let rg expand it.
+
+## 2. jq recipes
+
+Any JSON payload goes through `jq`; regex breaks on the first escaped quote. Flags: `-r` raw strings, `-s` slurp to array, `-n` no input, `--arg k v` / `--argjson k 3` (kills quoting and injection pain), `--slurpfile k f`, `-c` compact, `-e` exit status reflects whether output was empty/false (script guard).
+
+```
+jq -r '.data.items[] | "\(.id)\t\(.name)"'                  # TSV out
+jq -r '.[] | [.id,.state,.created_at] | @tsv'               # @tsv/@csv handle quoting
+jq -s 'add | unique_by(.id)'                               # merge JSONL + dedupe
+jq 'group_by(.status) | map({status:.[0].status, n:length})'  # histogram
+jq 'paths(numbers) as $p | {path:$p, value:getpath($p)}'     # flatten numbers
+jq -n --arg t "$TOK" '{auth:{scheme:"bearer", token:$t}}'
+jq 'del(.. | objects | .__typename?)'                       # scrub GraphQL noise
+jq -r '.errors[]?.message // empty'                         # no "null" lines
+jq -s 'map(select(.role=="assistant")) | length'
+```
+
+`//` is the ALTERNATIVE operator — it fires on `null` AND `false`, it is not a comment. `?` suppresses a type error only for the immediately preceding expression. `*` recursively merges objects (`.[0] * .[1]` patch style), `+` concatenates arrays (`.[0] + [1]` empty hole becomes null). Sort/limit allocation: `sort_by(-.score) | .[:20]`. Presence-first discovery beats guessing keys: `jq -r 'keys'`, `.. | objects | select(has("email"))`, or sample `jq 'walk(if type=="string" and (test("^https?://")) then "URL" else . end)' | paths`. Date math: `fromdateiso8601`/`todate` want a `Z`ed or offset-stamped string; epoch sections with `mktime`, `strftime`. Big JSONL: avoid `-s` (memory), prefer one-object-at-a-time with `select` piped to disk.
+
+## 3. curl and Invoke-RestMethod
+
+Decision: `curl.exe` (ships with Windows 10+) when byte-level control matters — streaming, proxies, TLS, multipart, timing. `Invoke-RestMethod` when you want the body parsed into objects for one-shot GET/POST. `Invoke-WebRequest` only when you need `.StatusCode`/`.Headers`; under PS 5.1 its HTML parser is slow and it **throws on 4xx**. Put `-sS` on curl, never bare `-s` — bare `-s` hides the failure reason too.
+
+```
+curl -sS -o out.json -w "%{http_code} %{time_total} %{size_download}\n" URL
+curl -sS -H "Authorization: Bearer $TOK" -H "Accept: application/json" URL
+curl -sS -X POST -H 'Content-Type: application/json' --data-binary @body.json URL
+curl -s --retry 3 --retry-delay 2 --retry-connrefused --max-time 25 URL
+curl -sS -D - -o /dev/null URL                          # headers to stdout, body discarded
+curl -s --fail-with-body -o b URL || tail -c 400 b      # -f hides error body; keep it
+curl -x http://127.0.0.1:8888 --cacert ca.pem https://internal/api
+curl -sN -H 'Accept: text/event-stream' URL             # -N/--no-buffer for streams
+```
+
+PowerShell: **`-TimeoutSec` is mandatory** (PS 5.1 default ≈100 s). Auth headers go in a hashtable.
+
+```powershell
+$h = @{ Authorization = "Bearer $env:TOK" }
+Invoke-RestMethod -Uri $u -Headers $h -TimeoutSec 20
+Invoke-RestMethod -Uri $u -Method Patch -Headers $h -ContentType 'application/json' `
+  -Body ([Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $o -Depth 8 -Compress))) -TimeoutSec 20
+```
+
+Two traps. (a) **UTF-8 body**: `-Body 'text é'` under PS 5.1 is encoded with the ANSI codepage and corrupts non-ASCII silently — always pass the UTF-8 byte array as above; pwsh 7 defaults to UTF-8 but send bytes for parity. (b) **Error shape**: `-SkipHttpErrorCheck`/`-ResponseHeadersRead` are pwsh 7+ only; in 5.1 use `try{…}catch{ $_.ErrorDetails.Message; [int]$_.Exception.Response.StatusCode }` — the body survives only in `ErrorDetails`. Multipart upload: `-Form` is 7+, so on 5.1 shell out to `curl.exe -F "file=@a.png" -F k=v URL`. Token-bearing headers with `&` must be quoted when routed through `cmd /c`.
+
+**SSE gotcha:** `Invoke-RestMethod`, buffered `Invoke-WebRequest`, and `GetStringAsync` read the *entire* response — a `text/event-stream` endpoint therefore looks like a hang until timeout and yields nothing partial. Consume streams with `curl.exe -sN` in a line loop, raw `HttpWebResponse` + `StreamReader`, or an `HttpClient` created with `HttpCompletionOption.ResponseHeadersRead`. Frame facts: events are `event:`/`data:`/`id:`/`retry:` lines terminated by a blank line; consecutive `data:` lines of one event must be joined with `\n`; one leading space after the colon is stripped per spec; `:ping` comment lines are heartbeats — ignore; a 429 or a wrong `Accept: */*` makes the server answer with JSON immediately. curl prints a `curl: (18) transfer closed with outstanding read data remaining` warning when the server hangs up mid-stream — that is normal for finite SSE jobs, not a failure.
+
+## 4. PowerShell ↔ cmd ↔ bash equivalents
+
+| task | PowerShell | cmd.exe | bash |
+| --- | --- | --- | --- |
+| B iff A ok | `A; if ($?) {B}` (7: `A && B`) | `A && B` | `A && B` |
+| always run B | `A; B` | `A & B` | `A; B` (or `A \|\| true`) |
+| env for one call | `$env:X='v'; A` | `set "X=v" && A` | `X=v A` |
+| capture output | `$o = & exe args` → string[] | `for /f "delims=" %i in ('exe') do @echo %i` | `o=$(exe args)` |
+| list incl. hidden | `gci -Force` | `dir /a` | `ls -la` |
+| find in PATH | `Get-Command node \| % Source` | `where node` | `command -v node` |
+| background | `Start-Process -PassThru -WindowStyle Hidden` | `start /b cmd /c A` | `A & echo $!` |
+| null sink | `A \| Out-Null; A 2>$null` | `A >nul 2>&1` | `A >/dev/null 2>&1` |
+| exit code | `$LASTEXITCODE` (native exes only) | `%ERRORLEVEL%` (delayed expansion `!` in loops) | `$?` |
+| multiline string | `@"…"@` (interps), `@'…'@` (literal) | `^` line join | `…` heredoc |
+| recurse+filter+act | `gci -R -File -Filter *.log \| where {$_.LastWriteTime -gt …} \| remove-item` | `for /r %f in (*.log) do @…` | `find . -name '*.log' -mtime -1 -print0 \| xargs -0 rm` |
+| path parts | `Split-Path -Leaf $f`, `[IO.Path]::GetFileNameWithoutExtension` | `%~nxf` | `basename`, `dirname`, `${f%.*}` |
+| replace in file | `(gc f) -replace 'a','b' \| sc f` (BOM risk! use `[IO.File]::WriteAllLines`) | no in-place | `sed -i 's/a/b/g' f` |
+| measure runtime | `Measure-Command { A }` | none native | `time A` |
+| URL encode | `[uri]::EscapeDataString($s)` | — | `python3 -c 'import urllib.parse,sys;print(urllib.parse.quote_plus(sys.argv[1]))' "$s"` |
+| pass args literally | `& exe --% /Flag:%VAR%` (stops PS parsing) | `%%` in .bat | quote normally |
+
+Three interop landmines. (1) PowerShell **parses `-like` switches itself**: `apply /foo` may bind as a parameter; `--%` or call `cmd /c`. (2) In 5.1, native stderr merged with `2>&1` becomes ErrorRecord objects — ordering and re-wrapping break; safest is `cmd /c "A 2>&1"` or set `$ErrorActionPreference='Continue'`. (3) `&&` is a 5.1 syntax error; `||` too. Cross-shell payloads with `$`, `()`, `&`: write a `.ps1`/`.sh` file and invoke with `-File` / `bash -c '…'` with single quotes — never rebuild inside double-quoted PS strings.
+
+## 5. python one-liners for data munging
+
+`python -c` / `py -c` (Windows) wins when a step needs a dict, a float compare, a timezone, or CSV quoting — the point where awk/sed get brittle. Quote hell on Windows: outer `"…"`, inner `'…'`, no nested doubles; past 200 chars use a `python3 - <<'EOF'` heredoc, bash-style. If the shim `python` opens the Store, use `py -3`.
+
+```bash
+py -c "import json,collections;print(collections.Counter(j['status'] for j in json.load(open('r.json'))))"
+python3 -c "print(sum(1 for l in open('a.log',encoding='utf-8',errors='replace') if 'ERROR' in l))"
+python3 - <<'EOF'
+import csv, io
+rows = list(csv.DictReader(io.StringIO(open('a.csv', newline='', encoding='utf-8-sig').read())))
+print(len(rows), rows[0].keys())
+EOF
+py -c "from pathlib import Path;[print(p.read_text(encoding='utf-8')[:200]) for p in Path('.').rglob('*.env')]"
+py -c "import re,sys;print(max((m.group(0) for m in re.finditer(r'\d+\.\d+\.\d+', sys.stdin.read())), key=lambda s:list(map(int,s.split('.')))))"
+py -c "import statistics as s,d=[…];print(s.mean(d),s.median(d),s.pstdev(d))"
+```
+
+Practices: `errors='replace'` (or `'surrogateescape'`) stops one stray byte from killing a whole-file scan; `encoding='utf-8-sig'` strips the BOM Excel leaves in CSV; pass `newline=''` to `csv` on Windows or embedded newlines in quoted fields shift every row. Never trust `float(v)` on scraped columns — wrap in try/except or filter with a regex, since `1,000`, `N/A`, and `—` throw. For "biggest/hottest/keyed by anything", pass `key=` to `max`/`sorted` instead of sorting by hand: `max(objs, key=lambda o: o['ts'])`. When stdin piping, an invisible CWD (spawned shell has your working dir; pass paths absolute). `python -` with a heredoc keeps single-quoted `'EOF'` the escape from shell expansion; unquoted EOF lets the shell eat `$` and backticks inside your code. Two-liners reach their limit fast: when the one-liner exceeds one screen, write `tool.py` and run `py tool.py` — a reviewable file beats a cursed pipeline. Quick fields summary-needed: reading helped if your structure você don't know → start by printing `list(d.keys())` / `type(d)` rather than guessing path names.
+

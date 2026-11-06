@@ -38,14 +38,33 @@ def generate_api_key():
     return 'na-sk-' + secrets.token_urlsafe(64)
 
 
-def extract_json(raw: str):
+def _model_content_text(raw):
+    """Normalize text returned by plain and structured-content chat models."""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        parts = []
+        for block in raw:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                text = block.get('text') or block.get('content')
+                if isinstance(text, str):
+                    parts.append(text)
+        return '\n'.join(parts)
+    return str(raw)
+
+
+def extract_json(raw):
+    raw = _model_content_text(raw)
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
         raise ValueError("No valid JSON found in model response.")
     return json.loads(match.group(0))
 
 
-def extract_json_array(raw: str):
+def extract_json_array(raw):
+    raw = _model_content_text(raw)
     match = re.search(r"\[.*\]", raw, re.DOTALL)
     if not match:
         raise ValueError("No valid JSON array found in model response.")

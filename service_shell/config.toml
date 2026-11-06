@@ -1,0 +1,56 @@
+# Hands Always-On Shell — user config. Every key mirrors shell/config.py dataclass
+# fields; unknown keys are ignored, missing keys keep code defaults. Env overrides
+# win over this file: SAWII_PERSONA_URL, SAWII_PERSONA_KEY, HANDS_SHELL_BACKEND_URL,
+# HANDS_SHELL_THREAD_ID, HANDS_SHELL_BACKEND_TOKEN, HANDS_SHELL_PORT.
+
+[core]
+# proof-of-life budget: wake -> tray light + beep is <1s by construction
+# (shell/config.py ACK_DEADLINE_S). No classification/network/disk on that path.
+ack_sound = true      # winsound chirp the instant wake fires (sub-ms)
+ack_tts = true        # spoken "Yes?" via SAPI one-shot, launched detached
+exec_tools = true     # forward persona tool_calls to [core].task_executor_url
+task_executor_url = ""  # e.g. "http://127.0.0.1:8000/aiagent/persona/tool_exec" — empty = tools PARKED on the response (UI can act)
+log_level = "INFO"
+
+[wake]
+# engine ladder: auto = porcupine -> openwakeword -> pocketsphinx -> energy_vad -> simulated
+# On this box auto resolves POCKETSPHINX (see README "Wake engine notes" for why the rungs above it skip).
+engine = "auto"
+words = ["hey hands", "hey tasker", "hey operator"]  # words[0] = audio keyphrase (py5.1 API: single phrase)
+buffer_ms = 600       # rolling window fed to the detector (RAM only; audio NEVER persisted)
+threshold = 0.55
+energy_floor = 300.0  # RMS gate below which the detector is skipped (battery-friendly)
+vad_aggressiveness = 2
+
+[context]
+poll_interval_s = 20.0   # ambient cadence; on_change=true fast-polls while the title is settling
+on_change = true
+history_len = 40
+max_summary_chars = 1200
+# HARD PRIVACY DEFAULTS — both stay false unless the user opts in:
+opt_in_screenshots = false   # no screenshot capture exists in this build (stub-flag only)
+opt_in_persist_jsonl = false # rolling JSONL of activity under var/state/ (rotated, capped)
+persist_path = "var/state/context.jsonl"
+
+[backend]
+base_url = "http://127.0.0.1:8000"   # local Tasker FastAPI; probed via health_path first
+health_path = "/"                     # backend main.py answers {'message': now} at '/'
+act_path_template = "/aiagent/persona/{tid}/act"
+thread_id = ""                        # set (or HANDS_SHELL_THREAD_ID) + token => backend route
+token = ""                            # user JWT; route is auth-guarded
+timeout_s = 12.0
+
+[persona]
+# direct DL-Companion fallback — baked key = Hands persona id 60 (matches
+# backend/persona_client.py HANDS_PERSONA_KEY). Set here only to rotate;
+# prefer SAWII_PERSONA_KEY env so this file never ships a secret.
+base_url = "https://dl-companion-production.up.railway.app"
+api_key = ""
+model = "sawii-persona"
+timeout_s = 90.0
+
+[http]
+host = "127.0.0.1"                    # loopback only — never bind 0.0.0.0
+port = 8765                           # localhost API: POST /intent, GET /last_response ...
+listen_voice_port = 8766              # reserved for the voice lane (stub; README)
+context_prefix_max_chars = 1200

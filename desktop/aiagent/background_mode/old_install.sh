@@ -35,7 +35,7 @@ fi
 
 mkdir -p /agent/profile
 
-echo "[*] Setting up Python venv for NeuralAgent..."
+echo "[*] Setting up Python venv for Tasker..."
 cd /agent/aiagent
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip setuptools wheel

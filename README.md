@@ -97,6 +97,32 @@ The Electron development launcher invokes the persistent system Python interpret
 
 ## Dual-lobe settings
 
+## Command-line interface
+
+Tasker can run without Electron through the included CLI. The CLI starts the
+local backend when necessary, performs the local development login, creates a
+thread, and launches the desktop agent for actionable tasks.
+
+Run a single task from the repository root:
+
+    tasker.cmd "Open Notepad and type hello"
+
+Start an interactive prompt:
+
+    tasker.cmd
+
+The interactive prompt keeps a conversation thread across commands and
+supports `/help`, `/new`, `/status`, `/thinking on`, `/thinking off`, and
+`/exit`, similar to an agent-oriented coding CLI.
+
+Useful options:
+
+    tasker.cmd --thinking "Research this topic and write a summary"
+    tasker.cmd --help
+
+Press Ctrl+C while an agent is running to stop and cancel the current task.
+The CLI intentionally does not enable WSL background mode.
+
 Screen-aware is the default:
 
     $env:TASKER_DUAL_LOBE_PROFILE = "screen-aware"

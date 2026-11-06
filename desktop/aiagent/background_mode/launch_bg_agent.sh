@@ -54,6 +54,6 @@ echo "[*] Starting noVNC..."
 echo $! > /tmp/bg_novnc.pid
 sleep 2
 
-echo "[*] Launching NeuralAgent AI agent..."
+echo "[*] Launching Tasker AI agent..."
 #/agent/aiagent/venv/bin/python /agent/aiagent/main.py
 /agent/agent

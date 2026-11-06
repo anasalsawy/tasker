@@ -1,0 +1,2 @@
+monitor start 12:38:44 {'desktop-windows.md': (8649, 1793961306.0), 'tool-manuals.md': (14060, 1793961523.3), 'maps-and-computer-resources.md': None}
+12:39:44 QUIESCENT 60s+ sizes={'desktop-windows.md': (8649, 1793961306.0), 'tool-manuals.md': (14060, 1793961523.3), 'maps-and-computer-resources.md': None}

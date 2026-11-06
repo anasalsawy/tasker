@@ -1,6 +1,6 @@
 """Tasker's bounded dual-lobe execution coordinator.
 
-This module is deliberately independent from the model provider.  NeuralAgent's
+This module is deliberately independent from the model provider. Tasker's
 existing desktop agent remains the actuator; this coordinator only manages
 look-ahead, observation, and handoff.
 

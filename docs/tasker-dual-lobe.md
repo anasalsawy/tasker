@@ -1,6 +1,6 @@
 # Tasker dual-lobe execution
 
-Tasker keeps NeuralAgent's existing execution path and adds an opt-in look-ahead lane.
+Tasker keeps the existing execution path and adds an opt-in look-ahead lane.
 
 ## Runtime model
 
@@ -26,7 +26,7 @@ The profile is selected by the operator; Tasker does not switch it automatically
 - screen-aware (default): continuous observer plus predicted-boundary handoff checks.
 - predictive: permits look-ahead when a post-execution observation exists; useful for measuring latency, but it is less strict.
 - gatekeeper: reserved for the strict policy; it requires the same observation path and is intended for additional policy checks.
-- off: the original NeuralAgent single-loop path, useful as the control condition.
+- off: the original Tasker single-loop path, useful as the control condition.
 
 On Windows PowerShell:
 

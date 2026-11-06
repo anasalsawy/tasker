@@ -58,7 +58,7 @@ export default function Sidebar() {
       <LogoWrapper to="/">
         <Logo
           src={neuralagent_logo_white}
-          alt="NeuralAgent"
+          alt="Hands"
           height={40}
         />
       </LogoWrapper>

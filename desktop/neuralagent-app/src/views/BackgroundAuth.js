@@ -36,7 +36,7 @@ export default function BackgroundAuth() {
   return (
     <Container>
       <InstructionBox>
-        Log in to any sites or apps you'd like <Highlight>Tasker</Highlight> to control in the background. Close the window when you finish.<br />
+        Log in to any sites or apps you'd like <Highlight>Hands</Highlight> to control in the background. Close the window when you finish.<br />
         <small style={{ opacity: 0.7 }}>
           These sessions are stored securely on your computer. You can always do this from App &gt; Background Mode Authentication.
         </small>
@@ -44,7 +44,7 @@ export default function BackgroundAuth() {
       <FrameWrapper>
         <iframe
           src="http://127.0.0.1:39742/vnc.html?autoconnect=true&bell=off"
-          title="Tasker VNC Session"
+          title="Hands VNC Session"
         />
       </FrameWrapper>
     </Container>

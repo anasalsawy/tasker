@@ -10,7 +10,7 @@ def upload_file_s3(file):
     try:
         ext = file.filename.split('.')[-1]
         new_filename = '{}.{}'.format(generate_random_string(), ext)
-        filepath = '{}/{}'.format('neuralagent_clients', new_filename)
+        filepath = '{}/{}'.format('tasker_clients', new_filename)
 
         s3_client = get_s3_client()
         s3_client.upload_fileobj(
@@ -27,7 +27,7 @@ def upload_file_s3(file):
 def upload_screenshot_s3_bytesio(buffer: io.BytesIO, extension="png"):
     try:
         new_filename = f"{generate_random_string()}.{extension}"
-        filepath = f"neuralagent_screenshots/{new_filename}"
+        filepath = f"tasker_screenshots/{new_filename}"
 
         s3_client = get_s3_client()
         s3_client.upload_fileobj(
@@ -71,9 +71,9 @@ async def upload_image_s3(image):
     thumb_sm_name = '{}.thumb_sm.{}'.format(random_string, ext)
     thumb_lg_name = '{}.thumb_lg.{}'.format(random_string, ext)
 
-    filepath = '{}/{}'.format('neuralagent_clients', new_filename)
-    thumb_sm_path = '{}/{}'.format('neuralagent_clients', thumb_sm_name)
-    thumb_lg_path = '{}/{}'.format('neuralagent_clients', thumb_lg_name)
+    filepath = '{}/{}'.format('tasker_clients', new_filename)
+    thumb_sm_path = '{}/{}'.format('tasker_clients', thumb_sm_name)
+    thumb_lg_path = '{}/{}'.format('tasker_clients', thumb_lg_name)
 
     s3_client = get_s3_client()
     s3_client.upload_fileobj(

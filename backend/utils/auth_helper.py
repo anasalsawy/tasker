@@ -14,7 +14,7 @@ import os
 _dev_auth_bypass = os.getenv('TASKER_DEV_AUTH_BYPASS', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 JWT_SECRET = os.getenv('JWT_SECRET') or ('tasker-local-development-secret' if _dev_auth_bypass else None)
 JWT_ISS = os.getenv('JWT_ISS') or ('TaskerBackend' if _dev_auth_bypass else None)
-JWT_AUDIENCE_CLAIM = 'NeuralAgent'
+JWT_AUDIENCE_CLAIM = 'Tasker'
 
 
 def create_token_from_user(user: User, exp: datetime.datetime, session_id: int, with_refresh: bool = True):

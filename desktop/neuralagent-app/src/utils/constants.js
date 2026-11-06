@@ -5,8 +5,9 @@ const constants = {
   BASE_URL: SERVER_DNS + '/apps',
   WEBSOCKET_URL: WEBSOCKET_DNS + '/apps',
   API_KEY: process.env.REACT_APP_API_KEY,
-  APP_NAME: 'Tasker',
-  NEURALAGENT_LINK: 'https://github.com/anasalsawy/tasker',
+  APP_NAME: 'Hands',
+  // Identifier/path unchanged by design; user-facing wordmark is "Hands".
+  TASKER_LINK: 'https://github.com/anasalsawy/tasker',
   GENERAL_ERROR: 'Something wrong happened, please try again.',
   status: {
     INTERNAL_SERVER_ERROR: 500,

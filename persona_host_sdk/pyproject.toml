@@ -1,0 +1,22 @@
+[project]
+name = "persona-host-sdk"
+version = "0.1.0"
+description = "Reusable host-adapter SDK: run the DL-Companion Persona as any agent host's brain with delegated R-lanes."
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-timeout>=2.1"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+# A test that blocks forever (subprocess pipe, live network) must fail loudly,
+# not silently wedge the whole run. 120 s is ~15x the slowest honest test here.
+timeout = 120
+timeout_method = "thread"

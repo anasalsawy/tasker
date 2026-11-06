@@ -1,0 +1,10 @@
+﻿ingest started
+14:00:29  store already has: browser-automation.md, linux-systems.md, shell-and-command-line.md
+14:00:29  POST desktop-windows.md (21755 bytes)
+14:00:40  OK desktop-windows.md in 11.2s :: {"id":4,"name":"desktop-windows.md","chunks":36,"voice":"You have taken in desktop-windows.md. It is part of how you think and how you answer. Speak from what it says, in its way of seeing. Do not invent a page that was not in it."}
+14:00:40  POST maps-and-computer-resources.md (20159 bytes)
+14:00:47  OK maps-and-computer-resources.md in 6.4s :: {"id":5,"name":"maps-and-computer-resources.md","chunks":31,"voice":"You have taken in maps-and-computer-resources.md. It is part of how you think and how you answer. Speak from what it says, in its way of seeing. Do not invent a page that was not in it."}
+14:00:47  POST tool-manuals.md (29166 bytes)
+14:00:57  OK tool-manuals.md in 10.7s :: {"id":6,"name":"tool-manuals.md","chunks":41,"voice":"You have taken in tool-manuals.md. It is part of how you think and how you answer. Speak from what it says, in its way of seeing. Do not invent a page that was not in it."}
+14:00:58  FINAL STORE: tool-manuals.md, maps-and-computer-resources.md, desktop-windows.md, browser-automation.md, linux-systems.md, shell-and-command-line.md
+14:00:58  ingest batch complete

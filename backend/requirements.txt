@@ -21,6 +21,7 @@ langchain-openai
 langchain-aws
 langchain-azure-ai
 langchain-anthropic
+langchain-google-genai
 anthropic
 youtube-transcript-api
 beautifulsoup4
@@ -31,3 +32,4 @@ broadcaster
 broadcaster[redis]
 asyncio-redis
 requests
+httpx

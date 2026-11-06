@@ -1,0 +1,13 @@
+TASKER COMPLEX E2E TEST
+
+Customer: Alpha Project
+Status: PENDING_REVIEW
+Priority: High
+
+Checklist:
+- inspect source
+- replace status
+- append verification
+- save document
+
+END OF ORIGINAL CONTENT

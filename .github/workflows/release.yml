@@ -1,0 +1,119 @@
+name: Release Hands
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    paths:
+      - 'desktop/**'
+      - 'backend/**'
+      - '.github/workflows/release.yml'
+      - '!desktop/**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  win-installer:
+    runs-on: windows-latest
+    env:
+      # electron-builder reads GitHub Releases for the latest version / publish
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            desktop/package-lock.json
+            desktop/neuralagent-app/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set build version
+        id: ver
+        shell: bash
+        run: |
+          PKG=$(node -p "require('./desktop/package.json').version")
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            V="${GITHUB_REF_NAME#v}"
+            PUBLISH=always
+          else
+            V="${PKG}-ci${GITHUB_RUN_NUMBER}"
+            PUBLISH=never
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "Building $V (publish=$PUBLISH)"
+          # electron-builder derives gitTagVersion from the ref; a tag like v0.1.0
+          # must match the version we hand it, otherwise latest.yml is misleading.
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$V" != "$PKG" ]; then
+            echo "::warning::tag v$V != package.json version $PKG; tag version wins"
+          fi
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build React app
+        working-directory: desktop/neuralagent-app
+        run: npm ci && npm run build
+        env:
+          CI: 'false'
+
+      - name: Build bundled AI agents (agent.exe / suggestor.exe)
+        working-directory: desktop
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r aiagent/requirements.txt pyinstaller
+          npm run build:agent
+          npm run build:suggestor
+          Get-ChildItem agent_build | Format-Table Name,Length
+
+      - name: Verify electron-builder config
+        working-directory: desktop
+        run: npm run check:builder
+
+      - name: Build + publish Windows NSIS installer
+        if: github.ref_type == 'tag'
+        working-directory: desktop
+        shell: bash
+        run: npx electron-builder --win nsis --publish always -c.extraMetadata.version="${{ steps.ver.outputs.version }}"
+
+      - name: Build installer only (no publish) on branch pushes
+        if: github.ref_type != 'tag'
+        working-directory: desktop
+        shell: bash
+        run: npx electron-builder --win nsis --publish never -c.extraMetadata.version="${{ steps.ver.outputs.version }}"
+
+      - name: Persist build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hands-windows-${{ steps.ver.outputs.version }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/latest.yml
+            desktop/dist/*.blockmap
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Show published release tag
+        if: github.ref_type == 'tag'
+        run: gh release view ${{ github.ref_name }} --repo anasalsawy/tasker

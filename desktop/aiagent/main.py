@@ -1,21 +1,30 @@
 import base64
 import time
 import requests
+import sys
+import platform
+
+# Python 3.14's platform.system() can block indefinitely in its WMI query on
+# some Windows installations.  PyAutoGUI imports MouseInfo, which calls it at
+# import time, so the desktop agent would silently freeze before contacting the
+# backend.  sys.platform is already authoritative for this process.
+if sys.platform == "win32":
+    platform.system = lambda: "Windows"
+
 import pyautogui
 import mss
 import os
 import subprocess
-import platform
 from io import BytesIO
 from PIL import Image
 import webbrowser
-import sys
 import io
 import pyperclip
 import unicodedata
 import json
 import asyncio
 import logging
+import re
 import ui_extraction
 from dual_lobe import DualLobeCoordinator
 
@@ -36,6 +45,12 @@ logging.basicConfig(
 )
 
 screenshot_requested = False
+
+
+def emit_event(message, level="info", **details):
+    """Send a structured live-progress event to the Electron renderer."""
+    event = {"message": message, "level": level, "timestamp": time.time(), **details}
+    print("TASKER_EVENT:" + json.dumps(event, ensure_ascii=False), flush=True)
 
 def type_unicode_smart(text: str, delay: float = 0.05) -> None:
     try:
@@ -65,7 +80,10 @@ def type_unicode_smart(text: str, delay: float = 0.05) -> None:
 
 def windows_direct_app_launch(app_name):
     try:
-        subprocess.Popen(f'start "" "{app_name}"', shell=True, check=True)
+        subprocess.Popen(
+            ['cmd.exe', '/c', 'start', '', app_name],
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+        )
         return True
     except subprocess.CalledProcessError as e:
         print(f"[❌] Failed to launch with 'start': {e}")
@@ -79,24 +97,61 @@ def launch_application(app_name):
     try:
         if os_name == 'windows':
             if windows_direct_app_launch(app_name):
-                return
+                return True
 
             ps_command = f"powershell -Command \"Get-StartApps | Where-Object {{$_.Name -like '*{app_name}*'}} | Select-Object -First 1 -ExpandProperty AppId\""
             result = subprocess.run(ps_command, capture_output=True, text=True, shell=True)
             app_id = result.stdout.strip()
             if app_id:
                 subprocess.Popen(f'explorer.exe shell:AppsFolder\\{app_id}', shell=True)
-                return
+                return True
             print("❌ App not found via UWP or direct command.")
+            return False
 
         elif os_name == 'darwin':
             subprocess.Popen(["open", "-a", app_name])
+            return True
 
         elif os_name == 'linux':
             subprocess.Popen([app_name])
+            return True
 
     except Exception as e:
         print(f"❌ Could not launch {app_name}: {e}")
+        return False
+
+
+def try_direct_app_launch(subtask_text):
+    """Execute unambiguous app-launch commands without waiting on an LLM."""
+    text = (subtask_text or "").strip().lower().rstrip(".!?")
+    match = re.fullmatch(r"(?:please\s+)?(?:open|launch|start)\s+(.+?)", text)
+    if not match:
+        return False
+
+    requested = match.group(1).strip()
+    apps = {
+        "chrome": "chrome.exe",
+        "google chrome": "chrome.exe",
+        "edge": "msedge.exe",
+        "microsoft edge": "msedge.exe",
+        "notepad": "notepad.exe",
+        "calculator": "calc.exe",
+        "file explorer": "explorer.exe",
+        "explorer": "explorer.exe",
+    }
+    executable = apps.get(requested)
+    if not executable:
+        return False
+
+    if not launch_application(executable):
+        return False
+    url = (os.getenv("NEURALAGENT_API_URL") + "/aiagent/"
+           + os.getenv("NEURALAGENT_THREAD_ID") + "/complete_direct")
+    headers = {'Authorization': 'Bearer ' + os.getenv('NEURALAGENT_USER_ACCESS_TOKEN')}
+    response = requests.post(url, headers=headers, timeout=15)
+    response.raise_for_status()
+    print(f"[Tasker] Opened {requested} using the local fast path.")
+    return True
 
 def focus_app(app_name):
     os_name = platform.system().lower()
@@ -196,6 +251,13 @@ def perform_action(response):
         try:
             act = action["action"]
             params = action.get("params", {})
+            readable = act.replace("_", " ").strip().capitalize()
+            target = params.get("app_name") or params.get("url") or params.get("text")
+            emit_event(
+                f"{readable}{': ' + str(target)[:120] if target else ''}",
+                action=act,
+                params=params,
+            )
 
             if act in ["left_click", "double_click", "triple_click", "right_click"]:
                 x, y = scale_coords(params)
@@ -306,6 +368,7 @@ def get_next_step():
         'Authorization': 'Bearer ' + os.getenv('NEURALAGENT_USER_ACCESS_TOKEN'),
     }
 
+    emit_event("Reading the current screen")
     interactive_elements = ui_extraction.extract_interactive_elements()
     running_apps = ui_extraction.get_running_apps()
 
@@ -324,10 +387,18 @@ def get_next_step():
         screenshot_requested = False
 
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        emit_event("Planning the next desktop actions")
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
         if response.status_code in (200, 201, 202):
-            return response.json()
+            data = response.json()
+            action_names = [a.get("action", "action").replace("_", " ") for a in data.get("actions", [])]
+            emit_event("Next actions: " + ", ".join(action_names) if action_names else "Next action received")
+            return data
+        error = f"Next-step request failed: HTTP {response.status_code}: {response.text[:300]}"
+        emit_event(error, level="error")
+        print(f"[Tasker] {error}")
     except Exception as e:
+        emit_event(f"Next-step request failed: {e}", level="error")
         print(f"[❌] Error sending next step request: {e}")
     
     return None
@@ -344,11 +415,19 @@ def get_current_subtask():
         'current_running_apps': ui_extraction.get_running_apps(),
     }
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        emit_event("Loading the current task step")
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
         if response.status_code in (200, 201, 202):
-            return response.json()
-    except:
-        pass
+            data = response.json()
+            if data.get("subtask_text"):
+                emit_event("Current step: " + data["subtask_text"])
+            return data
+        error = f"Current-step request failed: HTTP {response.status_code}: {response.text[:300]}"
+        emit_event(error, level="error")
+        print(f"[Tasker] {error}")
+    except Exception as exc:
+        emit_event(f"Current-step request failed: {exc}", level="error")
+        print(f"[Tasker] Current-subtask request failed: {exc}")
     return None
 
 
@@ -451,7 +530,7 @@ def _dual_lobe_commit(batch, observation):
 
 
 def _run_dual_lobe(initial_response):
-    profile = os.getenv("TASKER_DUAL_LOBE_PROFILE", "screen-aware").strip().lower()
+    profile = os.getenv("TASKER_DUAL_LOBE_PROFILE", "off").strip().lower()
     max_batches = int(os.getenv("TASKER_DUAL_LOBE_MAX_BATCHES", "20"))
     coordinator = DualLobeCoordinator(
         preview_fn=_dual_lobe_preview,
@@ -460,7 +539,10 @@ def _run_dual_lobe(initial_response):
         capture_fn=_capture_screen_observation_payload,
         fallback_fn=get_next_step,
         profile=profile,
-        trace_fn=lambda message: print("[Tasker] " + message),
+        trace_fn=lambda message: (
+            print("[Tasker] " + message, flush=True),
+            emit_event(message.replace("_", " ").capitalize(), kind="engine"),
+        ),
     )
     report = coordinator.run(initial_response, max_batches=max_batches)
     print("Tasker dual-lobe report:", json.dumps(report.as_dict(), ensure_ascii=False))
@@ -474,6 +556,8 @@ async def dual_lobe_main_loop():
             continue
         if current_subtask_response.get("action") == "task_completed":
             break
+        if try_direct_app_launch(current_subtask_response.get("subtask_text")):
+            break
 
         action_response = get_next_step()
         if not action_response:
@@ -484,7 +568,7 @@ async def dual_lobe_main_loop():
             break
 
 async def main_loop():
-    profile = os.getenv("TASKER_DUAL_LOBE_PROFILE", "screen-aware").strip().lower()
+    profile = os.getenv("TASKER_DUAL_LOBE_PROFILE", "off").strip().lower()
     if profile != "off":
         await dual_lobe_main_loop()
         return
@@ -498,7 +582,7 @@ async def main_loop():
             break
 
         action_response = get_next_step()
-        print("NeuralAgent Next Step Response:", action_response)
+        print("Tasker Next Step Response:", action_response)
 
         if not action_response:
             continue
@@ -509,4 +593,5 @@ async def main_loop():
         perform_action(action_response)
 
 if __name__ == "__main__":
+    emit_event("Desktop agent started")
     asyncio.run(main_loop())

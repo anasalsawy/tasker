@@ -1,7 +1,14 @@
 import platform
+import sys
+
+# Avoid Python 3.14's occasionally blocking Windows WMI platform lookup.
+if sys.platform == "win32":
+    platform.system = lambda: "Windows"
+
 import pyautogui
 import psutil
 import os
+import time
 
 if platform.system() == "Windows":
     import win32gui
@@ -181,8 +188,16 @@ def extract_ui_elements_windows():
     try:
         foreground = auto.GetForegroundControl()
         elements = []
+        # Chromium/Electron accessibility trees can contain thousands of
+        # nodes.  Walking the whole tree made short commands appear frozen.
+        deadline = time.monotonic() + float(os.getenv("TASKER_UI_SCAN_TIMEOUT", "2"))
+        max_depth = int(os.getenv("TASKER_UI_SCAN_MAX_DEPTH", "8"))
+        max_elements = int(os.getenv("TASKER_UI_SCAN_MAX_ELEMENTS", "250"))
 
         def recurse(control, depth=0):
+            if (depth > max_depth or len(elements) >= max_elements
+                    or time.monotonic() >= deadline):
+                return
             try:
                 control_type = control.ControlTypeName
                 name = control.Name or ""
@@ -204,6 +219,8 @@ def extract_ui_elements_windows():
                         "depth": depth
                     })
             for child in control.GetChildren():
+                if len(elements) >= max_elements or time.monotonic() >= deadline:
+                    break
                 recurse(child, depth + 1)
 
         recurse(foreground)

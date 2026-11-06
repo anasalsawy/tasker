@@ -5,7 +5,7 @@ import { execSync } from 'child_process';
 import sudo from 'sudo-prompt';
 
 const distroName = 'NeuralOS';
-const baseDir = 'C:\\ProgramData\\NeuralAgent\\wsl';
+const baseDir = 'C:\\ProgramData\\Tasker\\wsl';
 const imagePath = path.join(baseDir, 'neuralos.tar.gz');
 const imageUrl = 'https://neuralagent-website-s3.s3.us-east-1.amazonaws.com/uploads/neuralos.tar.gz';
 
@@ -40,7 +40,7 @@ function isWSLInstalled() {
 
 function installWSLWithElevation() {
   return new Promise((resolve) => {
-    const options = { name: 'NeuralAgent Setup' };
+    const options = { name: 'Tasker Setup' };
 
     sudo.exec('wsl.exe --install --no-distribution --no-launch', options,
       (err, stdout, stderr) => {
@@ -57,7 +57,7 @@ function installWSLWithElevation() {
 
 function checkAndEnableFeatures() {
   return new Promise((resolve) => {
-    const options = { name: 'NeuralAgent Setup' };
+    const options = { name: 'Tasker Setup' };
 
     const script = `
 @echo off
@@ -168,7 +168,7 @@ function verifyDistro() {
 export async function setupBackgroundMode({ onStatus, onProgress }) {
   try {
     if (!checkWindowsVersion()) {
-      throw new Error('❌ NeuralAgent background mode requires Windows 10 or later.');
+      throw new Error('❌ Tasker background mode requires Windows 10 or later.');
     }
 
     const log = (msg) => {
@@ -179,7 +179,7 @@ export async function setupBackgroundMode({ onStatus, onProgress }) {
     const { wsl, vm, reboot } = await checkAndEnableFeatures();
     if (!wsl || !vm) {
       throw new Error(reboot
-        ? '✅ Features enabled. Please reboot your PC and relaunch NeuralAgent.'
+        ? '✅ Features enabled. Please reboot your PC and relaunch Tasker.'
         : '❌ Failed to enable required features.');
     }
 
@@ -193,21 +193,21 @@ export async function setupBackgroundMode({ onStatus, onProgress }) {
         );
       }
       log('✅ WSL runtime installed. Reboot might be required.');
-      //throw new Error('✅ WSL installed. Please reboot your PC and relaunch NeuralAgent.');
+      //throw new Error('✅ WSL installed. Please reboot your PC and relaunch Tasker.');
     }
 
     // --- Import distro if needed ---
     if (!isDistroRegistered()) {
-      log('Downloading NeuralAgent Runtime Environment...');
+      log('Downloading Tasker Runtime Environment...');
       await downloadImage(onProgress);
-      log('Importing NeuralAgent Runtime Environment...');
+      log('Importing Tasker Runtime Environment...');
       importDistro();
     }
 
     // --- Verify ---
-    log('Verifying NeuralAgent Runtime Environment setup...');
+    log('Verifying Tasker Runtime Environment setup...');
     verifyDistro();
-    log('✅ NeuralAgent Runtime Environment is ready.');
+    log('✅ Tasker Runtime Environment is ready.');
 
     return { success: true };
 

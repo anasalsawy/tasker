@@ -67,7 +67,7 @@ function SignUp() {
       dispatch(setLoadingDialog(false));
       const serverMessage = error?.response?.data?.message || error?.response?.data?.detail;
       const message = !error?.response
-        ? 'Cannot reach the Tasker backend at ' + constants.BASE_URL + '. Start Uvicorn and check the frontend .env file.'
+        ? 'Cannot reach the Hands backend at ' + constants.BASE_URL + '. Start Uvicorn and check the frontend .env file.'
         : (serverMessage || constants.GENERAL_ERROR);
       dispatch(setError(true, message));
       setTimeout(() => {
@@ -101,8 +101,8 @@ function SignUp() {
       <MainContainer>
         <AccountContainer>
           <AccountHeader>
-            <a href={constants.NEURALAGENT_LINK} target="_blank" rel="noreferrer" style={{textDecoration: 'none'}}>
-              <div className="tasker-auth-wordmark" aria-label="Tasker">TASKER</div>
+            <a href={constants.TASKER_LINK} target="_blank" rel="noreferrer" style={{textDecoration: 'none'}}>
+              <div className="tasker-auth-wordmark" aria-label="Hands">HANDS</div>
             </a>
             <FlexSpacer isRTL={false} />
             <Button color="#fff"

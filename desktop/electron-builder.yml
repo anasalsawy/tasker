@@ -1,0 +1,55 @@
+appId: com.hands.desktop
+productName: Hands
+copyright: Copyright (c) 2026 Hands
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+compression: maximum
+npmRebuild: false
+directories:
+  buildResources: assets
+  output: dist
+files:
+  - main.js
+  - electron/**/*
+  - assets/**/*
+  - neuralagent-app/build/**/*
+  - package.json
+extraResources:
+  - from: agent_build/agent.exe
+    to: agent.exe
+  - from: agent_build/suggestor.exe
+    to: suggestor.exe
+publish:
+  provider: github
+  owner: anasalsawy
+  repo: tasker
+  releaseType: release
+  vPrefixedTagName: true
+asar: true
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+  forceCodeSigning: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Hands
+  deleteAppDataOnUninstall: false
+  artifactName: ${productName}-Setup-${version}.${ext}
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  category: public.app-category.productivity
+  icon: assets/icon.png
+linux:
+  target:
+    - AppImage
+  category: Utility

@@ -5,14 +5,20 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import AzureChatOpenAI
 
 
-llm = AzureChatOpenAI(
-    azure_deployment='gpt-4.1-mini',
-    api_version='2024-12-01-preview',
-    temperature=0.3,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-)
+def _get_llm():
+    """Create the optional summarization client only when a tool needs it.
+
+    Constructing this client at module import time prevents the entire API,
+    including local development login, from starting without Azure settings.
+    """
+    return AzureChatOpenAI(
+        azure_deployment='gpt-4.1-mini',
+        api_version='2024-12-01-preview',
+        temperature=0.3,
+        max_tokens=None,
+        timeout=None,
+        max_retries=2,
+    )
 
 
 def fetch_and_summarize_url(url: str) -> str:
@@ -25,7 +31,7 @@ def fetch_and_summarize_url(url: str) -> str:
     full_text = "\n\n".join(doc.page_content for doc in docs)
 
     prompt = ChatPromptTemplate.from_template("Summarize the following:\n\n{input}")
-    chain = prompt | llm
+    chain = prompt | _get_llm()
 
     result = chain.invoke({"input": full_text})
     return result.content if hasattr(result, "content") else str(result)
@@ -51,7 +57,7 @@ def fetch_and_summarize_pdf(file_path: str = None, url: str = None) -> str:
     full_text = "\n\n".join(doc.page_content for doc in docs)
 
     prompt = ChatPromptTemplate.from_template("Summarize the following:\n\n{input}")
-    chain = prompt | llm
+    chain = prompt | _get_llm()
 
     result = chain.invoke({"input": full_text})
     return result.content if hasattr(result, "content") else str(result)
@@ -71,7 +77,7 @@ def summarize_youtube_video(url: str) -> str:
     full_text = "\n\n".join(doc.page_content for doc in docs)
 
     prompt = ChatPromptTemplate.from_template("Summarize the following:\n\n{input}")
-    chain = prompt | llm
+    chain = prompt | _get_llm()
 
     result = chain.invoke({"input": full_text})
     return result.content if hasattr(result, "content") else str(result)

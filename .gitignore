@@ -1,0 +1,22 @@
+# --- never commit these ---
+.venv/
+.venv311/
+__pycache__/
+*.pyc
+node_modules/
+desktop/neuralagent-app/node_modules/
+desktop/node_modules/
+dist/
+build/
+agent_build/
+logs/
+*.log
+.env
+L_out.txt
+L_err.txt
+M_out.txt
+M_err.txt
+V_out.txt
+V_err.txt
+W_out.txt
+W_err.txt

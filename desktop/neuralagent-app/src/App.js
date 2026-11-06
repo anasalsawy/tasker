@@ -27,6 +27,7 @@ import Overlay from './views/Overlay';
 import BackgroundAuth from './views/BackgroundAuth';
 import BackgroundTask from './views/BackgroundTask';
 import BackgroundSetup from './views/BackgroundSetup';
+import UpdateStatusPill from './components/UpdateStatusPill';
 
 const DEV_AUTH_BYPASS = process.env.REACT_APP_DEV_AUTH_BYPASS === 'true';
 
@@ -69,6 +70,7 @@ function AppRoutes() {
               <Route path='/threads/:tid' element={<Thread />} />
               <Route path="*" element={<RedirectTo linkType="router" to="/" redirectType="replace" />} />
             </Routes>
+            <UpdateStatusPill />
           </div>
         )
       ) : (
@@ -93,19 +95,30 @@ function App() {
   useEffect(() => {
     const asyncTask = async () => {
       if (DEV_AUTH_BYPASS) {
-        try {
-          const response = await axios.post('/auth/dev_login');
-          const { token, refresh_token, user } = response.data;
-          window.electronAPI.setToken(token);
-          window.electronAPI.setRefreshToken(refresh_token);
-          dispatch(setAccessToken(token));
-          dispatch(setUser(user));
-          dispatch(setAppLoading(false));
-        } catch (error) {
-          dispatch(setAppLoading(false));
-          const serverMessage = error?.response?.data?.message || error?.response?.data?.detail;
-          dispatch(setError(true, serverMessage || 'Development auth bypass failed. Check the backend and database.'));
+        let lastError;
+        // The Python backend has heavy imports and can take over a minute on
+        // its first Windows start. Keep the desktop on its loading screen and
+        // retry instead of incorrectly dropping the user at an auth failure.
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          try {
+            const response = await axios.post('/auth/dev_login');
+            const { token, refresh_token, user } = response.data;
+            window.electronAPI.setToken(token);
+            window.electronAPI.setRefreshToken(refresh_token);
+            dispatch(setAccessToken(token));
+            dispatch(setUser(user));
+            dispatch(setAppLoading(false));
+            return;
+          } catch (error) {
+            lastError = error;
+            if (attempt < 39) {
+              await new Promise((resolve) => window.setTimeout(resolve, 3000));
+            }
+          }
         }
+        dispatch(setAppLoading(false));
+        const serverMessage = lastError?.response?.data?.message || lastError?.response?.data?.detail;
+        dispatch(setError(true, serverMessage || 'Development auth bypass failed. Check the backend and database.'));
         return;
       }
 
@@ -136,7 +149,7 @@ function App() {
         refreshToken();
       } else {
         dispatch(setAppLoading(false));
-        dispatch(setError(true, 'Cannot reach the Tasker backend at ' + constants.BASE_URL + '.'));
+        dispatch(setError(true, 'Cannot reach the Hands backend at ' + constants.BASE_URL + '.'));
       }
     });
   };

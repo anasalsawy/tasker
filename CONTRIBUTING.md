@@ -1,5 +1,5 @@
 
-# 🤝 Contributing to NeuralAgent
+# 🤝 Contributing to Tasker
 
 We love your input! Whether it's fixing bugs, improving the docs, suggesting new features, or becoming a maintainer, your contributions are welcome.
 
@@ -10,8 +10,8 @@ We love your input! Whether it's fixing bugs, improving the docs, suggesting new
 Click the “Fork” button at the top right of this page and clone your fork locally.
 
 ```bash
-git clone https://github.com/your-username/neuralagent.git
-cd neuralagent
+git clone https://github.com/your-username/tasker.git
+cd tasker
 ```
 
 ### 2. Set Up Your Environment
@@ -62,6 +62,6 @@ Go to your fork on GitHub and open a pull request into `main`. Please describe y
 
 ## 💬 Need Help?
 
-Join our [Discord community](https://discord.gg/eGyW3kPcUs) or visit our [website](https://www.getneuralagent.com) for support and updates.
+Use the Tasker GitHub repository for support and updates.
 
 Happy hacking! 🚀

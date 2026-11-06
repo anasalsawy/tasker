@@ -223,7 +223,7 @@ def get_next_step():
 async def main_loop():
     while True:
         action_response = get_next_step()
-        print("NeuralAgent Next Step Response:", action_response)
+        print("Tasker Next Step Response:", action_response)
 
         if not action_response:
             continue

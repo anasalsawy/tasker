@@ -12,6 +12,7 @@ import url from 'url';
 import http from 'http';
 import { v4 as uuidv4 } from 'uuid';
 import { setupBackgroundMode, isBackgroundModeReady } from './electron/utils/wslSetup.js';
+import { initAutoUpdater, pushUpdateStatus } from './electron/utils/autoUpdate.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,11 +22,16 @@ const store = new Store();
 let mainWindow;
 let overlayWindow;
 let aiagentProcess;
+let aiagentIsBackground = false;
 let backgroundAuthWindow;
 let bgAuthProcess;
 let bgAgentWindow;
 let bgSetupWindow;
 let readyToClose = false;
+// Hands overlay state (see OVERLAY geometry + applyOverlayBounds below)
+let overlayExpanded = false;
+let overlayHasSuggestions = false;
+let overlayPreferredMode = 'bar'; // 'bar' | 'chat' | 'pet' — reported by the renderer
 
 function ensureDeviceId() {
   let deviceId = store.get(constants.DEVICE_ID_STORE_KEY);
@@ -62,9 +68,25 @@ ipcMain.on('expand-overlay', (_, hasSuggestions) => {
   expandMinimizeOverlay(true, hasSuggestions);
 });
 
+// Hands — task-gated collapse of the overlay window itself.
+// renderer reports 'bar' | 'chat' | 'pet'; we resize the always-on-top window
+// so execution shows as a compact strip and plain chat/conversation never
+// grows into an execution surface.
+ipcMain.on('set-overlay-mode', (_, mode) => {
+  overlayPreferredMode = mode === 'pet' ? 'pet' : (mode === 'chat' ? 'chat' : 'bar');
+  applyOverlayBounds();
+});
+
 ipcMain.handle('get-last-background-mode-value', () => store.get(constants.LAST_BACKGROUND_MODE_VALUE));
 ipcMain.handle('get-last-thinking-mode-value', () => store.get(constants.LAST_THINKING_MODE_VALUE));
 ipcMain.on('set-last-thinking-mode-value', (_, lastThinkingModeValue) => store.set(constants.LAST_THINKING_MODE_VALUE, lastThinkingModeValue));
+
+// Hands-free (always-open voice channel) — operator toggle, default on.
+ipcMain.handle('get-hands-free-value', () => {
+  const v = store.get(constants.HANDS_FREE_STORE_KEY);
+  return v === undefined ? 'true' : String(v);
+});
+ipcMain.on('set-hands-free-value', (_, value) => store.set(constants.HANDS_FREE_STORE_KEY, String(value)));
 
 // Handle MINIMIZE request
 ipcMain.on('minimize-overlay', () => {
@@ -200,11 +222,25 @@ ipcMain.on('launch-ai-agent', async (_, baseURL, threadId, backgroundMode) => {
   const isMac = process.platform === 'darwin';
 
   store.set(constants.LAST_BACKGROUND_MODE_VALUE, backgroundMode.toString());
+  aiagentIsBackground = Boolean(backgroundMode);
 
   if (!backgroundMode) {
+    if (aiagentProcess && !aiagentProcess.killed) {
+      kill(aiagentProcess.pid, 'SIGKILL', () => {});
+      aiagentProcess = null;
+    }
     // Tasker uses the user's persistent Python installation in development.
     // Set TASKER_PYTHON to an explicit interpreter when several are installed.
-    const pythonCommand = process.env.TASKER_PYTHON || (isWindows ? 'python' : 'python3');
+    let pythonCommand = process.env.TASKER_PYTHON || (isWindows ? 'py' : 'python3');
+    if (isWindows && !process.env.TASKER_PYTHON) {
+      try {
+        pythonCommand = execSync('py -c "import sys; print(sys.executable)"', {
+          encoding: 'utf8', windowsHide: true,
+        }).trim();
+      } catch (error) {
+        console.error('Could not resolve Tasker Python interpreter:', error);
+      }
+    }
     const agentScript = path.join(__dirname, 'aiagent', 'main.py');
     aiagentProcess = spawn(pythonCommand, [agentScript], {
       cwd: __dirname,
@@ -213,6 +249,7 @@ ipcMain.on('launch-ai-agent', async (_, baseURL, threadId, backgroundMode) => {
         NEURALAGENT_API_URL: baseURL,
         NEURALAGENT_THREAD_ID: threadId,
         NEURALAGENT_USER_ACCESS_TOKEN: store.get(constants.ACCESS_TOKEN_STORE_KEY),
+        TASKER_DUAL_LOBE_PROFILE: 'off',
         PYTHONUTF8: '1',
       },
     });
@@ -251,8 +288,33 @@ ipcMain.on('launch-ai-agent', async (_, baseURL, threadId, backgroundMode) => {
   overlayWindow?.webContents.send('ai-agent-launch', threadId);
   expandMinimizeOverlay(true, false);
 
-  aiagentProcess.stdout.on('data', (data) => console.log(`[Agent stdout]: ${data}`));
-  aiagentProcess.stderr.on('data', (data) => console.error(`[Agent stderr]: ${data}`));
+  let agentStdoutBuffer = '';
+  aiagentProcess.stdout.on('data', (data) => {
+    const text = data.toString();
+    console.log(`[Agent stdout]: ${text}`);
+    agentStdoutBuffer += text;
+    const lines = agentStdoutBuffer.split(/\r?\n/);
+    agentStdoutBuffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('TASKER_EVENT:')) continue;
+      try {
+        const event = JSON.parse(line.slice('TASKER_EVENT:'.length));
+        mainWindow?.webContents.send('ai-agent-status', event);
+        overlayWindow?.webContents.send('ai-agent-status', event);
+      } catch (error) {
+        console.error('Could not parse Tasker progress event:', error);
+      }
+    }
+  });
+  aiagentProcess.stderr.on('data', (data) => {
+    const message = data.toString();
+    console.error(`[Agent stderr]: ${message}`);
+    mainWindow?.webContents.send('ai-agent-status', {
+      message: message.trim().split(/\r?\n/).slice(-1)[0] || 'Desktop agent error',
+      level: 'error',
+      timestamp: Date.now() / 1000,
+    });
+  });
 
   aiagentProcess.on('error', err => {
     console.error('❌  Agent process failed to start:', err);
@@ -264,7 +326,9 @@ ipcMain.on('launch-ai-agent', async (_, baseURL, threadId, backgroundMode) => {
     if (bgAgentWindow) {
       bgAgentWindow.close();
     }
-    cleanupBGAgent();
+    if (aiagentIsBackground) {
+      cleanupBGAgent();
+    }
     if (mainWindow?.isMinimized()) {
       mainWindow.restore();
     }
@@ -278,6 +342,7 @@ ipcMain.on('launch-ai-agent', async (_, baseURL, threadId, backgroundMode) => {
       mainWindow?.webContents.send('trigger-cancel-all-tasks');
     }
     aiagentProcess = null;
+    aiagentIsBackground = false;
   });
 });
 
@@ -289,7 +354,10 @@ ipcMain.on('stop-ai-agent', () => {
     });
   }
   aiagentProcess = null;
-  cleanupBGAgent();
+  if (aiagentIsBackground) {
+    cleanupBGAgent();
+  }
+  aiagentIsBackground = false;
 });
 
 const GOOGLE_CLIENT_ID = '296264060339-jamhdgfckblr0qgq360t5ok4e1kede35.apps.googleusercontent.com';
@@ -455,7 +523,7 @@ function launchBackgroundAuthWindow() {
       backgroundAuthWindow = new BrowserWindow({
         width: 1350,
         height: 780,
-        title: 'Tasker Background Auth',
+        title: 'Hands Background Auth',
         icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
         webPreferences: {
           contextIsolation: true,
@@ -489,7 +557,7 @@ function launchBackgroundAgentWindow() {
       bgAgentWindow = new BrowserWindow({
         width: 1350,
         height: 780,
-        title: 'Tasker Background Task',
+        title: 'Hands Background Task',
         icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
         webPreferences: {
           contextIsolation: true,
@@ -535,6 +603,10 @@ function createWindow() {
       });
 
   mainWindow.loadURL(startURL);
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    pushUpdateStatus(mainWindow);
+  });
 
   mainWindow.on('close', async (e) => {
     if (readyToClose) return;
@@ -609,17 +681,40 @@ function createOverlayWindow() {
   });
 }
 
+// Overlay geometry. Hands rule: the window only grows into an execution strip
+// when the RENDERER declares mode==='pet' (task recognized post-hoc); plain
+// chat/conversation keeps the compact footprint. Sizes:
+//   idle chip       60x60    (default 'bar' face)
+//   execution pet  320x64    (compact strip, corner-pinned, never obscures)
+//   chat-expanded  376xH     (H grows with suggestions only, not with tasks)
+const OVERLAY = {
+  idle: { w: 60, h: 60 },
+  pet: { w: 320, h: 64 },
+  chat: { w: 376, h: 64 },
+  chatSuggestions: { w: 376, h: 392 },
+  margin: 25,
+};
+
 function expandMinimizeOverlay(expanded, hasSuggestions = false) {
+  overlayExpanded = Boolean(expanded);
+  overlayHasSuggestions = Boolean(hasSuggestions);
+  applyOverlayBounds();
+}
+
+function applyOverlayBounds() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
 
-  const W = expanded ? 350 : 60;
-  const H = expanded ? (hasSuggestions ? 380 : 60) : 60;
-  const M = 25;
-  const { width: SW, height: SH } = screen.getPrimaryDisplay().workArea;
-  const X = SW - W - M;
-  const Y = SH - H - M;
+  let size;
+  if (overlayExpanded && overlayHasSuggestions) size = OVERLAY.chatSuggestions;
+  else if (overlayExpanded && overlayPreferredMode !== 'bar') size = OVERLAY.chat;
+  else if (!overlayExpanded && overlayPreferredMode === 'pet') size = OVERLAY.pet;
+  else size = OVERLAY.idle;
 
-  overlayWindow.setBounds({ x: X, y: Y, width: W, height: H }, true);
+  const { width: SW, height: SH } = screen.getPrimaryDisplay().workArea;
+  const X = SW - size.w - OVERLAY.margin;
+  const Y = SH - size.h - OVERLAY.margin;
+
+  overlayWindow.setBounds({ x: X, y: Y, width: size.w, height: size.h }, true);
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -636,6 +731,7 @@ if (!gotLock) {
 
 app.whenReady().then(() => {
   ensureDeviceId();
+  initAutoUpdater();
   createWindow();
   if (store.get(constants.ACCESS_TOKEN_STORE_KEY)) {
     createOverlayWindow();

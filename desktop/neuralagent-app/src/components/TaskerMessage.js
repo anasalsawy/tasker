@@ -118,7 +118,7 @@ export default function TaskerMessage({ message }) {
       <div className="tasker-message-rail" aria-hidden="true" />
       <div className="tasker-message-body">
         <div className="tasker-message-meta">
-          <span>{isUser ? 'You' : 'Tasker engine'}</span>
+          <span>{isUser ? 'You' : 'Hands'}</span>
           <time>{message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time>
         </div>
         {content}

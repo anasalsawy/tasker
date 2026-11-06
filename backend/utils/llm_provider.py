@@ -4,10 +4,20 @@ from botocore.config import Config
 
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_aws import ChatBedrockConverse
-from langchain_anthropic import ChatAnthropic
+
+# Anthropic is optional — its newer langchain glue expects anthropic.OverloadedError,
+# which missing from some anthropic packages in this env defeats. Anthropic agents
+# (planner/computer_use legacy) are dormant now that persona is the live path.
+try:
+    from langchain_anthropic import ChatAnthropic
+except AttributeError:
+    ChatAnthropic = None
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.language_models.chat_models import BaseChatModel
 
-load_dotenv()
+# Tasker is a local desktop app: its project-specific settings must take
+# precedence over unrelated machine-wide provider variables.
+load_dotenv(override=True)
 
 
 def _request_limits():
@@ -17,8 +27,17 @@ def _request_limits():
 
 
 def _agent_env(agent: str, suffix: str, fallback: str = "") -> str:
-    value = os.getenv("{}_AGENT_{}".format(agent.upper(), suffix), "").strip()
-    return value or fallback
+    name = "{}_AGENT_{}".format(agent.upper(), suffix)
+    value = os.getenv(name, "").strip() or fallback.strip()
+
+    # People commonly paste a complete KEY=value line into the value field.
+    # Accept that harmless formatting mistake without logging the secret.
+    possible_names = (name, "OPENAI_{}".format(suffix))
+    for possible_name in possible_names:
+        prefix = possible_name + "="
+        if value.startswith(prefix):
+            value = value[len(prefix):].strip()
+    return value
 
 
 def get_llm(
@@ -27,7 +46,7 @@ def get_llm(
     max_tokens: int = None,
     thinking_enabled: bool = False,
 ) -> BaseChatModel:
-    """Build a configured model for one NeuralAgent/Tasker logical agent.
+    """Build a configured model for one Tasker logical agent.
 
     In addition to the upstream providers, Tasker supports any
     OpenAI-compatible endpoint. This covers NVIDIA NIM, Gemini gateways,
@@ -75,6 +94,20 @@ def get_llm(
             raise ValueError(
                 "OpenAI-compatible agent {} requires BASE_URL and API_KEY".format(agent)
             )
+
+        # Google AI Studio now issues AQ-prefixed authorization keys by
+        # default. Those keys are not reliably accepted by the OpenAI-
+        # compatibility gateway, so use Google's native client for them.
+        if "generativelanguage.googleapis.com" in base_url and api_key.startswith("AQ."):
+            return ChatGoogleGenerativeAI(
+                model=model_id,
+                api_key=api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+                max_retries=retries,
+            )
+
         return ChatOpenAI(
             model=model_id,
             base_url=base_url.rstrip("/"),

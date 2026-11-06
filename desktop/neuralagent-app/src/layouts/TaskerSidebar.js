@@ -4,11 +4,19 @@ import { FiActivity, FiClock, FiPlus, FiTerminal } from 'react-icons/fi';
 import { useSelector } from 'react-redux';
 import axios from '../utils/axios';
 import constants from '../utils/constants';
+import { subscribeHandsStatus } from '../state/handsBus';
 
 export default function TaskerSidebar() {
   const [threads, setThreads] = useState([]);
+  const [liveRun, setLiveRun] = useState(null);
   const accessToken = useSelector((state) => state.accessToken);
   const navigate = useNavigate();
+
+  useEffect(() => subscribeHandsStatus(function (status) {
+    // Live execution reflects into the listview titles: the thread entering the
+    // pet state gets its status line pinned next to its title.
+    setLiveRun(status && status.mode === 'pet' ? status : null);
+  }), []);
 
   useEffect(() => {
     let mounted = true;
@@ -25,11 +33,11 @@ export default function TaskerSidebar() {
   }, [accessToken]);
 
   return (
-    <aside className="tasker-sidebar" aria-label="Tasker workspace">
-      <button className="tasker-brand" onClick={() => navigate('/')} aria-label="Open Tasker home">
-        <span className="tasker-mark" aria-hidden="true">T</span>
+    <aside className="tasker-sidebar" aria-label="Hands workspace">
+      <button className="tasker-brand" onClick={() => navigate('/')} aria-label="Open Hands home">
+        <span className="tasker-mark" aria-hidden="true">H</span>
         <span>
-          <strong>Tasker</strong>
+          <strong>Hands</strong>
           <small>desktop control</small>
         </span>
       </button>
@@ -55,7 +63,17 @@ export default function TaskerSidebar() {
               className={({ isActive }) => 'tasker-thread-link' + (isActive ? ' is-active' : '')}
             >
               <FiTerminal aria-hidden="true" />
-              <span>{thread.title}</span>
+              <span>
+                {thread.title}
+                {liveRun && liveRun.threadId === thread.id && (
+                  <em className="hands-live-tag" title={liveRun.statusLine || ''}>
+                    {liveRun.activeLanes > 1 ? liveRun.activeLanes + ' lanes' : 'live'}
+                  </em>
+                )}
+                {liveRun && !liveRun.threadId && thread.status === 'working' && (
+                  <em className="hands-live-tag">{liveRun.statusLine || 'running'}</em>
+                )}
+              </span>
             </NavLink>
           ))
         )}

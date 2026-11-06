@@ -1,0 +1,9 @@
+## 4. Start Menu, AppsFolder, and where launches really go
+
+The Start menu is rendered by `StartMenuExperienceHost.exe` on top of exactly two folders: `%APPDATA%\Microsoft\Windows\Start Menu\Programs` (this user) and `%ProgramData%\Microsoft\Windows\Start Menu\Programs` (all users). Dropping a valid `.lnk` there makes the app appear in Start after the next index refresh — that single act is the entire "integration" most installers perform. Open them with `shell:Programs` and `shell:Common Programs`. UWP/MSIX apps are **not** in those folders; they live in `shell:AppsFolder`, a virtual namespace of `<PackageFamilyName>!<AppId>` entries.
+
+Enumerate everything launchable with `Get-StartApps` — it returns rows of `Name` + AppID, where classic entries show a `.lnk` path and pack apps show the `family!AppId` form. Launch either form directly: `explorer.exe "shell:AppsFolder\<family>!<AppId>"` starts a pack app without the menu UI entirely. This beats driving the Start overlay when you just need the app up; the UIA route below is only for what the launcher cannot do (pins, tile layout).
+
+Driving the Start UI itself: the panel is a XAML island — classic HWND messages get nowhere; use UIA (control types `ListItem`, `Button`, names equal to the `.lnk` display names) or keyboard. The reliable keyboard scaffold: `Win` opens Start with search focused → type the name → `Enter` launches the top hit. If the top result is the wrong app (search ranks historical use, not you), arrow-key to the right row before Enter. `Win` then typing is strictly more robust than opening Start first and then navigating: the search box is pre-focused.
+
+Long-term per-app launch fidelity: execute the actual `.lnk`/`.appref-ms`, not the bare exe, so arguments, working directory, AUMID grouping, and any elevation verb are honored. Verify a launch succeeded by process existence + window enumeration within a short poll budget, not by `Start-Process` returning without error.

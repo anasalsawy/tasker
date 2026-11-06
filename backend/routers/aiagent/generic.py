@@ -176,6 +176,53 @@ def current_subtask_request(tid: str, current_subtask_request_obj: CurrentSubtas
     }
 
 
+@router.post('/{tid}/complete_direct')
+def complete_direct_task(tid: str, db: Session = Depends(get_session),
+                         user: User = Depends(get_current_user_dependency)):
+    """Complete a task executed locally by the desktop agent's safe fast path."""
+    instance = db.exec(select(Thread).where(and_(
+        Thread.id == tid, Thread.user_id == user.id,
+        Thread.status == ThreadStatus.WORKING,
+    ))).first()
+    if not instance:
+        raise CustomError(status.HTTP_404_NOT_FOUND, 'Thread not found')
+
+    task = db.exec(select(ThreadTask).where(and_(
+        ThreadTask.thread_id == tid,
+        ThreadTask.status == ThreadTaskStatus.WORKING,
+    ))).first()
+    if not task:
+        raise CustomError(status.HTTP_404_NOT_FOUND, 'Thread has no running task')
+
+    plan = db.exec(select(ThreadTaskPlan).where(and_(
+        ThreadTaskPlan.thread_task_id == task.id,
+        ThreadTaskPlan.status == ThreadTaskPlanStatus.ACTIVE,
+    ))).first()
+    if plan:
+        for subtask in db.exec(select(PlanSubtask).where(and_(
+            PlanSubtask.thread_task_plan_id == plan.id,
+            PlanSubtask.status == SubtaskStatus.ACTIVE,
+        ))).all():
+            subtask.status = SubtaskStatus.COMPLETED
+            db.add(subtask)
+        plan.status = ThreadTaskPlanStatus.COMPLETED
+        db.add(plan)
+
+    task.status = ThreadTaskStatus.COMPLETED
+    instance.status = ThreadStatus.STANDBY
+    db.add(task)
+    db.add(instance)
+    db.add(ThreadMessage(
+        thread_id=instance.id,
+        thread_task_id=task.id,
+        thread_chat_type=ThreadChatType.DESKTOP_USE,
+        thread_chat_from=ThreadChatFromChoices.FROM_AI,
+        text=json.dumps({'actions': [{'action': 'task_completed'}]}),
+    ))
+    db.commit()
+    return {'completed': True}
+
+
 @router.post('/{tid}/next_step')
 def next_step(tid: str, next_step_req: NextStepRequest, db: Session = Depends(get_session),
               user: User = Depends(get_current_user_dependency)):
@@ -233,11 +280,9 @@ def next_step(tid: str, next_step_req: NextStepRequest, db: Session = Depends(ge
             screenshot_s3_path = upload_helper.upload_screenshot_s3_bytesio(image_io, extension="png")
         
         screenshot_user_message_block = {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/png",
-                "data": next_step_req.screenshot_b64
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/png;base64," + next_step_req.screenshot_b64
             }
         }
 

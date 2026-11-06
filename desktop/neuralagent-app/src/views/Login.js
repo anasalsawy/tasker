@@ -64,7 +64,7 @@ function Login() {
       if (status === constants.status.UNAUTHORIZED) {
         dispatch(setError(true, 'Incorrect Email or Password, Please try again.'));
       } else if (!error?.response) {
-        dispatch(setError(true, 'Cannot reach the Tasker backend at ' + constants.BASE_URL + '. Start Uvicorn and check the frontend .env file.'));
+        dispatch(setError(true, 'Cannot reach the Hands backend at ' + constants.BASE_URL + '. Start Uvicorn and check the frontend .env file.'));
       } else {
         dispatch(setError(true, serverMessage || constants.GENERAL_ERROR));
       }
@@ -103,7 +103,7 @@ function Login() {
       <MainContainer>
         <AccountContainer>
           <AccountHeader>
-            <div className="tasker-auth-wordmark" aria-label="Tasker">TASKER</div>
+            <div className="tasker-auth-wordmark" aria-label="Hands">HANDS</div>
             <FlexSpacer isRTL={false} />
             <Button color="#fff"
               padding="14px 20px"
@@ -115,7 +115,7 @@ function Login() {
           <AccountDiv>
             <InfoContainer>
               <FormTitle style={{textAlign: 'center'}}>
-                Login to Tasker
+                Login to Hands
               </FormTitle>
               <AccountTextField placeholder={'Email'} style={{marginTop: '30px'}} type="email"
                 value={email}

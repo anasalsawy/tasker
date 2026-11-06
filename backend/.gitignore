@@ -2,3 +2,7 @@ venv/
 .env
 keys/
 ai_chat_logs/
+__pycache__/
+*.py[cod]
+tasker-local.db
+tasker-backend.*.log

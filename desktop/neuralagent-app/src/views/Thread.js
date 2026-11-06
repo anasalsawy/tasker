@@ -6,6 +6,14 @@ import axios from '../utils/axios';
 import constants from '../utils/constants';
 import { setError, setLoadingDialog } from '../store';
 import TaskerMessage from '../components/TaskerMessage';
+import ExecutionPet from '../components/ExecutionPet';
+import useHands from '../hooks/useHands';
+import { publishHandsStatus } from '../state/handsBus';
+
+const PERSONA_BASE = process.env.REACT_APP_PROTOCOL + '://' + process.env.REACT_APP_DNS + '/aiagent/persona';
+// persona === new DL-Companion lanes (default). legacy === the original consecutive-agent flow, untouched.
+const PROFILE_PERSONA = 'persona';
+const PROFILE_LEGACY = 'legacy';
 
 export default function Thread() {
   const [thread, setThread] = useState(null);
@@ -14,11 +22,14 @@ export default function Thread() {
   const [isSendingMessage, setSendingMessage] = useState(false);
   const [backgroundMode, setBackgroundMode] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
+  const [liveEvents, setLiveEvents] = useState([]);
+  const [executionProfile, setExecutionProfile] = useState(PROFILE_PERSONA);
   const accessToken = useSelector((state) => state.accessToken);
   const { tid } = useParams();
   const bottomRef = useRef(null);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const hands = useHands({ personaBaseUrl: PERSONA_BASE, accessToken: accessToken });
 
   const getThread = async () => {
     try {
@@ -49,9 +60,36 @@ export default function Thread() {
 
   const sendMessage = async () => {
     const text = messageText.trim();
-    if (!text || isSendingMessage || thread?.status === 'working') return;
+    if (!text || isSendingMessage || (thread?.status === 'working' && executionProfile !== PROFILE_PERSONA)) return;
 
     setMessageText('');
+
+    // ── Persona profile: the reply path NEVER waits on classification.
+    // Local echo + optimistic streaming first; the legacy classify/create-task
+    // bookkeeping below runs fire-and-forget alongside the SSE turn. Task
+    // recognition (bar->pet) is done POST-HOC by the reducer from tool/lane
+    // events, exactly like the desktop overlay.
+    if (executionProfile === PROFILE_PERSONA) {
+      hands.dispatch({ kind: 'user_text', text });
+      hands.streamAct(tid, { text });
+      // Fire-and-forget: mirror the message + classification into the thread
+      // store using the EXISTING endpoint (old desktop flows rely on these rows
+      // and on the WORKING ThreadTask for persona context). Not awaited here —
+      // its LLM classify step used to block the reply path; now it never does.
+      axios.post('/threads/' + tid + '/send_message',
+        { text, background_mode: backgroundMode, extended_thinking_mode: thinkingMode },
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      ).then((response) => {
+        const data = response.data;
+        getThread();
+        getThreadMessages();
+        // Classifier says desktop_task but the persona turn already covers the
+        // work; launch the legacy agent ONLY on the legacy profile (above).
+        if (data.type === 'desktop_task') hands.dispatch({ kind: 'task_recognized', title: text });
+      }).catch(() => {});
+      return;
+    }
+
     setSendingMessage(true);
     dispatch(setLoadingDialog(true));
     try {
@@ -62,6 +100,7 @@ export default function Thread() {
       );
       const data = response.data;
       if (data.type === 'desktop_task') {
+        hands.dispatch({ kind: 'task_recognized', title: text });
         const wantsBackground = backgroundMode || data.is_background_mode_requested;
         const wantsThinking = thinkingMode || data.is_extended_thinking_mode_requested;
         if (wantsBackground && !backgroundMode) {
@@ -82,6 +121,8 @@ export default function Thread() {
           tid,
           wantsBackground
         );
+      } else if (data.response) {
+        hands.dispatch({ kind: 'chat_reply', text: data.response });
       }
       await getThread();
       await getThreadMessages();
@@ -155,7 +196,27 @@ export default function Thread() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, liveEvents]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onAIAgentStatus) return undefined;
+    const unsubscribe = window.electronAPI.onAIAgentStatus((event) => {
+      setLiveEvents((previous) => [...previous, event].slice(-30));
+    });
+    return unsubscribe;
+  }, [tid]);
+
+  // Feed the collapsed surfaces + sidebar titles from this page too.
+  useEffect(() => {
+    publishHandsStatus({
+      threadId: tid,
+      threadTitle: thread?.title,
+      mode: hands.state.mode,
+      statusLine: hands.selectors.statusLine,
+      activeLanes: hands.selectors.activeLanes,
+      online: Boolean(accessToken),
+    });
+  }, [tid, thread?.title, hands.state]);
 
   useEffect(() => {
     const loadPreferences = async () => {
@@ -187,6 +248,7 @@ export default function Thread() {
           <h1>{thread.title}</h1>
         </div>
         <div className="tasker-thread-header-actions">
+          {hands.state.mode === 'pet' && <ExecutionPet state={hands.state} onStop={cancelRunningTask} call={hands.call} />}
           <span className={'tasker-run-status ' + (isWorking ? 'is-working' : '')}>
             <span className="tasker-status-dot" aria-hidden="true" />
             {isWorking ? 'Executing' : 'Standby'}
@@ -202,7 +264,7 @@ export default function Thread() {
           <div className="tasker-panel-header">
             <div>
               <span className="tasker-panel-eyebrow">Run timeline</span>
-              <h2>What Tasker is doing</h2>
+              <h2>What Hands is doing</h2>
             </div>
             <span className="tasker-live-label"><FiRadio aria-hidden="true" /> Live log</span>
           </div>
@@ -212,10 +274,19 @@ export default function Thread() {
             ) : (
               messages.map((message) => <TaskerMessage key={'message-' + message.id} message={message} />)
             )}
-            {isWorking && (
+            {liveEvents.map((event, index) => (
+              <div
+                className={'tasker-working-line tasker-live-event ' + (event.level === 'error' ? 'is-error' : '')}
+                key={(event.timestamp || index) + '-' + index}
+              >
+                <span className="tasker-working-pulse" aria-hidden="true" />
+                <span>{event.message}</span>
+              </div>
+            ))}
+            {isWorking && liveEvents.length === 0 && (
               <div className="tasker-working-line">
                 <span className="tasker-working-pulse" aria-hidden="true" />
-                <span>Watching the desktop and preparing the next boundary…</span>
+                <span>Starting execution…</span>
               </div>
             )}
             <div ref={bottomRef} />
@@ -225,10 +296,19 @@ export default function Thread() {
         <aside className="tasker-inspector" aria-label="Task run details">
           <div className="tasker-inspector-card">
             <span className="tasker-panel-eyebrow">Execution profile</span>
-            <div className="tasker-profile-name">Screen-aware</div>
-            <p>A executes the current batch. B prepares the next one while the screen observer checks the handoff.</p>
-            <div className="tasker-inspector-row"><span>Provider state</span><strong>{isWorking ? 'Connected' : 'Idle'}</strong></div>
-            <div className="tasker-inspector-row"><span>Verification</span><strong>Boundary check</strong></div>
+            <div className="tasker-profile-name">
+              {executionProfile === PROFILE_PERSONA ? 'Persona lanes' : 'Direct execution'}
+            </div>
+            <p>
+              {executionProfile === PROFILE_PERSONA
+                ? 'One mind fans out R-lanes on DL-Companion; every tool runs concurrently and streams back here.'
+                : 'The original desktop agent reads the current screen, chooses the next action, and executes it.'}
+            </p>
+            <div className="tasker-inspector-row"><span>Provider state</span><strong>{isWorking || hands.state.mode === 'pet' ? 'Connected' : 'Idle'}</strong></div>
+            <div className="tasker-inspector-row"><span>Progress</span><strong>{hands.state.toolsTotal ? hands.state.toolsDone + '/' + hands.state.toolsTotal + ' tools' : 'Live actions'}</strong></div>
+            <button className="tasker-control-button" onClick={() => setExecutionProfile(executionProfile === PROFILE_PERSONA ? PROFILE_LEGACY : PROFILE_PERSONA)}>
+              <FiActivity aria-hidden="true" /><span>Persona lanes</span><b>{executionProfile === PROFILE_PERSONA ? 'On' : 'Off'}</b>
+            </button>
           </div>
 
           <div className="tasker-inspector-card">
@@ -255,12 +335,12 @@ export default function Thread() {
             id="tasker-follow-up"
             value={messageText}
             rows={2}
-            placeholder={isWorking ? 'Tasker is executing. Stop it before sending a follow-up.' : 'Add a follow-up instruction…'}
-            disabled={isWorking || isSendingMessage}
+            placeholder={isWorking && executionProfile !== PROFILE_PERSONA ? 'Hands is executing. Stop it before sending a follow-up.' : 'Add a follow-up instruction…'}
+            disabled={(isWorking && executionProfile !== PROFILE_PERSONA) || isSendingMessage}
             onChange={(event) => setMessageText(event.target.value)}
             onKeyDown={handleTextEnterKey}
           />
-          <button className="tasker-submit tasker-submit-compact" type="submit" disabled={!messageText.trim() || isWorking || isSendingMessage} aria-label="Send follow-up">
+          <button className="tasker-submit tasker-submit-compact" type="submit" disabled={!messageText.trim() || (isWorking && executionProfile !== PROFILE_PERSONA) || isSendingMessage} aria-label="Send follow-up">
             <FiSend aria-hidden="true" />
           </button>
         </div>

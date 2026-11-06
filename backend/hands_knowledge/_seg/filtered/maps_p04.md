@@ -1,0 +1,3 @@
+﻿## 7. Taskbar, tray, and pinned state
+
+Pinned taskbar items are `.lnk` files under `%APPDATA%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\` (plus `ImplicitAppShortcuts\` for grouped variants). Listing that folder tells you what is pinned. **Writing there does not pin**: Explorer keeps a parallel per-item "pinned" boolean in its automatic-destination store, and the taskbar view only follows that flag. The supported pin paths are: the verb (`FolderItem.InvokeVerb('taskbarpin')` over `Shell.Application` windows for Starts-menu items — Win10+), or driving the Start menu UIA (`pin to taskbar` context verb). Same asymmetry on unpin — delete the `.lnk` and the flag makes it vanish; set the flag through code and the rows refresh.

@@ -1,9 +1,9 @@
 {
   "name": "tasker-desktop",
-  "version": "1.5.2",
-  "description": "Tasker Electron Desktop Application",
+  "version": "0.1.0",
+  "description": "Hands — Electron desktop application",
   "license": "ISC",
-  "author": "",
+  "author": "Hands <hello@hands.app>",
   "type": "module",
   "main": "main.js",
   "scripts": {
@@ -15,52 +15,11 @@
     "build:agent:nuitko": "nuitka --standalone --onefile --lto=no --output-dir=agent_build/ --output-filename=agent --assume-yes-for-downloads --include-package=comtypes aiagent/main.py",
     "build:suggestor:nuitko": "nuitka --standalone --onefile --lto=no --output-dir=agent_build/ --output-filename=suggestor --assume-yes-for-downloads --include-package=comtypes aiagent/suggestor.py",
     "build": "npm run react-build && electron-builder",
+    "dist": "npm run react-build && electron-builder",
+    "dist:win": "npm run react-build && electron-builder --win --publish always",
+    "dist:win:draft": "npm run react-build && electron-builder --win --publish never",
+    "check:builder": "node scripts/verify-builder-config.mjs",
     "dev": "electron ."
-  },
-  "build": {
-    "appId": "com.tasker.desktop",
-    "productName": "Tasker",
-    "directories": {
-      "buildResources": "assets",
-      "output": "dist"
-    },
-    "files": [
-      "main.js",
-      "electron/**/*",
-      "neuralagent-app/build/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "agent_build/agent.exe",
-        "to": "agent.exe"
-      },
-      {
-        "from": "agent_build/suggestor.exe",
-        "to": "suggestor.exe"
-      }
-    ],
-    "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": "arm64"
-        }
-      ],
-      "category": "public.app-category.productivity"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    },
-    "linux": {
-      "target": "AppImage"
-    }
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
@@ -71,6 +30,7 @@
   "dependencies": {
     "electron-is-dev": "^3.0.1",
     "electron-store": "^10.0.1",
+    "electron-updater": "^6.6.2",
     "express": "^5.1.0",
     "sudo-prompt": "^9.2.1",
     "tree-kill": "^1.2.2",

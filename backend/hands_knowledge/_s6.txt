@@ -1,0 +1,1 @@
+Taskbar truth lives in three places that never fully agree.The .lnk files under `%APPDATA%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\` prove what the user asked to keep.

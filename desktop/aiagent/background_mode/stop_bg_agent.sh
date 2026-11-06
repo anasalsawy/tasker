@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "[*] Stopping NeuralAgent background session..."
+echo "[*] Stopping Tasker background session..."
 
 # Kill processes using PID files
 for name in xvfb chrome vnc novnc aiagent; do

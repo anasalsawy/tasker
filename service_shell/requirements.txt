@@ -1,0 +1,24 @@
+# Hands Always-On Shell - resident Windows tray presence for the Hands persona.
+# Install into service_shell/.venv:  "C:\Program Files\Python311\python.exe" -m venv .venv && .venv\Scripts\pip install -r requirements.txt
+# Interpreter facts (measured on this box, Nov 6 2026):
+#   - global / repo .venv are Python 3.14: NO wheels for pocketsphinx 5.1 (tries to
+#     build from source and hangs), pywin32 partially present, no pytest.
+#   - service_shell/.venv is Python 3.11.9: every wheel below installs clean.
+#     pystray/win32, sounddevice, webrtcvad-wheels, pocketsphinx (with bundled
+#     en-us model + CMU dict containing "hands/hey/tasker/operator"), httpx, pytest.
+pystray>=0.19.5
+pillow>=10.0
+numpy>=1.26              # direct import: shell/audio.py (RMS/frames), wake OwwEngine probe
+pywin32>=306 ; python_version < "3.13"
+sounddevice>=0.5
+webrtcvad-wheels>=2.0.14
+pocketsphinx>=5.1.1
+httpx>=0.28
+pytest>=9.0
+
+# Optional upgrade path (NOT required; shell degrades without them):
+# openwakeword>=0.6 ; python_version < "3.13"   # higher-accuracy custom "hey hands"
+#                                               # model; needs `oww train` on a GPU box
+#                                               # (this build's `oww generate` errors on
+#                                               # Windows - see README STUBS section)
+# pvporcupine>=4    # needs a Picovoice console access key + custom keyword
